@@ -1,5 +1,5 @@
 {
-	"name": "delivery",
+	"name": "auth-drizzle",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
@@ -25,6 +25,7 @@
 		"@tailwindcss/forms": "^0.5.9",
 		"@tailwindcss/typography": "^0.5.15",
 		"@tailwindcss/vite": "^4.0.0",
+		"@types/better-sqlite3": "^7.6.12",
 		"drizzle-kit": "^0.30.2",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
@@ -41,11 +42,7 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
-		"@libsql/client": "^0.14.0",
-		"@node-rs/argon2": "^2.0.2",
-		"@oslojs/crypto": "^1.0.1",
-		"@oslojs/encoding": "^1.1.0",
-		"dotenv": "^16.4.7",
+		"better-sqlite3": "^11.8.0",
 		"drizzle-orm": "^0.40.0"
 	}
 }
