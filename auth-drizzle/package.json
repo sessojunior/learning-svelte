@@ -26,6 +26,7 @@
 		"@tailwindcss/typography": "^0.5.15",
 		"@tailwindcss/vite": "^4.0.0",
 		"@types/better-sqlite3": "^7.6.12",
+		"@types/nodemailer": "^6.4.17",
 		"drizzle-kit": "^0.30.2",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
@@ -42,7 +43,10 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
+		"better-auth": "^1.2.4",
 		"better-sqlite3": "^11.8.0",
-		"drizzle-orm": "^0.40.0"
+		"drizzle-orm": "^0.40.0",
+		"nodemailer": "^6.10.0",
+		"zod": "^3.24.2"
 	}
 }
