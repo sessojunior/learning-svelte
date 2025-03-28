@@ -25,7 +25,7 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		autoSignIn: true, // Padrão: true
-		requireEmailVerification: true // Padrão: false. Habilitando requer que o usuário verifique seu e-mail antes de fazer login
+		requireEmailVerification: false // Padrão: false. Habilitando requer que o usuário verifique seu e-mail antes de fazer login
 	},
 	// Autenticação por provedor social
 	socialProviders: {

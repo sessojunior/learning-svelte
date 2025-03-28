@@ -1,71 +1,156 @@
 <script lang="ts">
-	import { signInEmail, signInOtp } from '$lib/utils/auth-functions'
 	import { goto } from '$app/navigation'
 
 	// Tipo de login: 'email', 'otp', 'social'
 	let type = $state('email')
 
-	// Login com e-mail e senha
+	// Dados para login por e-mail
 	let email = $state('')
 	let password = $state('')
 
-	// Login com OTP
+	// Dados para login com OTP
 	let stepOtp = $state(1)
 	let otp = $state(null)
 
-	// Carregando e mensagem
+	// Carregando e erros
 	let loading = $state(false)
-	let errorMessage: string | null = $state(null)
+	let errors: { field?: string; code: string; message: string }[] = $state([])
+
+	// Mapeamento de campos para nomes amigáveis
+	const fieldName: Record<string, string> = {
+		name: 'Nome',
+		email: 'E-mail',
+		password: 'Senha'
+	}
 
 	// Login com e-mail e senha
 	const handleSignInEmail = async () => {
 		loading = true
+
+		// Reseta a mensagem de erro antes de tentar fazer login novamente
+		errors = []
+
 		try {
-			const response = await signInEmail(email, password)
-			loading = false
-			// Se obteve dados, redireciona para o dashboard
-			if (response?.data) return goto('/dashboard')
-			// Se obteve erro, exibe a mensagem
-			errorMessage = response?.errorMsg || 'Ocorreu um erro ao tentar fazer login.'
-			console.error('Erro ao fazer login:', response?.error)
+			// Chama a API de login
+			const response = await fetch('/api/auth/signin', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'email', email, password })
+			})
+
+			loading = false // Desativa o loading após a resposta da API
+
+			const data = await response.json() // Resposta da API
+
+			// Se foi feito o login
+			if (response.ok && data.success) {
+				// Redireciona para o dashboard
+				goto('/dashboard')
+			} else {
+				// Se houve erros recebidos pela API
+				if (data.errors) {
+					errors = data.errors
+				} else {
+					errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
+				}
+			}
 		} catch (err) {
-			loading = false
-			// Exibe a mensagem de erro
-			errorMessage = 'Erro inesperado. Tente novamente.'
-			console.error('Erro inesperado no login:', err)
+			console.error('Erro ao processar a resposta:', err)
+			errors = [{ code: 'PROCCESS_ERROR', message: 'Erro ao processar a resposta da API.' }]
 		}
 	}
 
 	// Login com OTP
 	const handleSignInOtp = async () => {
-		loading = true
 		try {
-			const response = await signInOtp(email)
-			loading = false
-			// Se obteve dados, avança para o passo 2 (informar o OTP)
-			if (response?.data?.success) {
-				errorMessage = null
-				console.log('response?.data', response?.data)
-				return (stepOtp = 2)
+			// Se for o passo 1 do OTP
+			if (stepOtp === 1) {
+				// Se preencheu o e-mail
+				if (email) {
+					loading = true
+					errors = []
+
+					// Chama a API de login
+					const response = await fetch('/api/auth/signin', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'otp', email })
+					})
+
+					loading = false // Desativa o loading após a resposta da API
+
+					const data = await response.json() // Resposta da API
+
+					// Se foi enviado o OTP por e-mail
+					if (response.ok && data.success) {
+						// Avança para o passo 2 do OTP
+						stepOtp = 2
+						// Reseta a mensagem de erro antes de tentar fazer login novamente
+						errors = []
+					} else {
+						// Se houve erros recebidos pela API
+						if (data.errors) {
+							errors = data.errors
+						} else {
+							errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
+						}
+					}
+				}
 			}
-			// Se obteve erro, exibe a mensagem
-			errorMessage = response?.errorMsg || 'Erro ao enviar OTP.'
-			console.error('Erro ao enviar OTP:', response?.error)
+
+			// Se for o passo 2 do OTP
+			if (stepOtp === 2) {
+				// Se preencheu o e-mail e o OTP
+				if (email && otp) {
+					loading = true
+					errors = []
+
+					// Chama a API de login
+					const response = await fetch('/api/auth/signin', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'otp', email, otp })
+					})
+
+					loading = false // Desativa o loading após a resposta da API
+
+					const data = await response.json() // Resposta da API
+
+					// Se o OTP corresponder ao fornecido
+					if (response.ok && data.success) {
+						// Redireciona para o dashboard
+						goto('/dashboard')
+					} else {
+						// Se houve erros recebidos pela API
+						if (data.errors) {
+							errors = data.errors
+						} else {
+							errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
+						}
+					}
+				}
+			}
 		} catch (err) {
-			loading = false
-			// Exibe a mensagem de erro
-			errorMessage = 'Erro inesperado. Tente novamente.'
-			console.error('Erro inesperado no login OTP:', err)
+			console.error('Erro ao processar a resposta:', err)
+			errors = [{ code: 'PROCCESS_ERROR', message: 'Erro ao processar a resposta da API.' }]
 		}
 	}
 </script>
 
 <h1>Login</h1>
 
-<!-- Mensagem de erro -->
-{#if errorMessage}
+<!-- Exibição de erros globais -->
+{#if errors.length > 0}
 	<div>
-		<p>Mensagem: {errorMessage}</p>
+		{#each errors as { field, message }}
+			{#if !field}
+				<!-- Erro geral, como 'Erro desconhecido' -->
+				<p>Mensagem: {message}</p>
+			{:else}
+				<!-- Erro específico do campo -->
+				<p>{fieldName[field] || field}: {message}</p>
+			{/if}
+		{/each}
 	</div>
 {/if}
 
@@ -90,12 +175,22 @@
 				Email:
 				<input type="email" bind:value={email} autocomplete="email" required />
 			</label>
+			{#each errors as { field, message }}
+				{#if field === 'email'}
+					<p class="error">{message}</p>
+				{/if}
+			{/each}
 		</div>
 		<div>
 			<label>
 				Senha:
 				<input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
 			</label>
+			{#each errors as { field, message }}
+				{#if field === 'password'}
+					<p class="error">{message}</p>
+				{/if}
+			{/each}
 		</div>
 		<div>
 			<button type="submit" disabled={loading}>
@@ -116,6 +211,11 @@
 					Email:
 					<input type="email" bind:value={email} autocomplete="email" required />
 				</label>
+				{#each errors as { field, message }}
+					{#if field === 'email'}
+						<p class="error">{message}</p>
+					{/if}
+				{/each}
 			</div>
 			<div>
 				<button type="submit" disabled={loading}>
@@ -134,6 +234,11 @@
 					OTP:
 					<input type="text" bind:value={otp} required />
 				</label>
+				{#each errors as { field, message }}
+					{#if field === 'otp'}
+						<p class="error">{message}</p>
+					{/if}
+				{/each}
 			</div>
 			<div>
 				<button type="submit" disabled={loading}>
@@ -149,3 +254,17 @@
 <div>
 	<p>Não possui uma conta? <a href="/signup">Crie uma agora</a></p>
 </div>
+
+<!-- 
+	Usando @apply com módulos Vue, Svelte ou CSS
+	https://tailwindcss.com/docs/upgrade-guide#using-apply-with-vue-svelte-or-css-modules
+	Usar: @reference "../../app.css";
+	Ou usar: var(--text-red-500);
+-->
+<style>
+	@reference "../../app.css";
+
+	.error {
+		@apply text-sm text-red-500;
+	}
+</style>

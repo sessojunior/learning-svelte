@@ -1,91 +1,202 @@
 import { auth } from '$lib/server/auth'
-import { db } from '$lib/server/db'
-import { users } from '$lib/server/db/schema'
-import { eq } from 'drizzle-orm'
+import { errorCodes } from '$lib/server/auth-utils'
+import { checkIfUserEmailExists } from '$lib/server/db-utils'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
 
-// Definição dos tipos para a resposta
-export type ErrorResponse = {
-	errors: { field: string | null; description: string }[]
-}
-export type SuccessResponse = {
-	user: { id: string; name: string; email: string; image: string | null | undefined; emailVerified: boolean }
-	token: string | null
-	redirect: boolean
-	url: string | undefined
+// Tipagem para a resposta da API
+type SignInResponse = {
+	success: boolean
+	errors?: { field?: string; code: string; message: string }[]
+	user?: { id: string; name: string; email: string; image: string | null | undefined; emailVerified: boolean }
+	token?: string | null
 }
 
-// Schema de validação com Zod
-const schema = z.object({
-	name: z.string().min(2, 'O nome está muito curto.'),
-	email: z.string().email('O e-mail é inválido.'),
-	password: z
-		.string()
-		.min(8, 'A senha deve ter pelo menos 8 caracteres.')
-		.regex(/[A-Z]/, 'A senha deve conter pelo menos uma letra maiúscula.')
-		.regex(/[a-z]/, 'A senha deve conter pelo menos uma letra minúscula.')
-		.regex(/\d/, 'A senha deve conter pelo menos um número.')
-		.regex(/[!@#$%^&*(),.?":{}|<>]/, 'A senha deve conter pelo menos um caractere especial.')
+// Schema de validação com Zod: tipo
+const typeSignInSchema = z.object({
+	type: z.enum(['email', 'otp', 'social'], {
+		invalid_type_error: 'Você deve enviar a forma correta que deseja fazer login.',
+		required_error: 'O tipo de login é obrigatório.'
+	})
 })
 
-// Função auxiliar que verifica se o usuário existe no banco de dados através do e-mail
-const userExists = async (email: string) => await db.select().from(users).where(eq(users.email, email)).get()
+// Schema de validação com Zod: tipo email
+const emailSignInSchema = z.object({
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+	password: z
+		.string({ required_error: 'A senha é obrigatória.' }) // Garante que a senha é obrigatória
+		.regex(/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/, { message: 'A senha é inválida.' }) //Garante que a senha atende a todos os requisitos: pelo menos uma letra maiúscula, pelo menos uma letra minúscula, pelo menos um número e pelo menos um caractere especial
+})
 
-// Função auxiliar para cadastrar um usuário com email e senha
+// Schema de validação com Zod: tipo otp
+const otpSignInSchema = z.object({
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+	otp: z
+		.string() // Garante que seja uma string
+		.regex(/^\d{6}$/, { message: 'O código é inválido.' }) // Garante que o OTP seja composto por exatamente 6 números
+		.optional() // Garante que o OTP é opcional
+})
+
+// Função para fazer login
+// Recebe para login com e-mail e senha: { type, email, password }
+// Recebe para login com OTP: { type, email } ou { type, email, otp }
+// Retorna um JSON com a resposta da API do tipo SignInResponse e o status
 export async function POST({ request }: RequestEvent): Promise<Response> {
+	// Obtem dados do corpo da requisição
+	let body
 	try {
-		// Obter dados do corpo da requisição
-		const body = await request.json()
-
-		// Validação com Zod
-		const validatedData = schema.parse(body)
-
-		// Verifica se o e-mail ja existe
-		if (await userExists(validatedData.email)) {
-			return json({ errors: [{ field: 'email', description: 'E-mail já cadastrado.' }] } as ErrorResponse, { status: 400 })
-		}
-
-		// Chama a API para cadastrar o usuário
-		const response = await auth.api.signInEmail({
-			body: {
-				name: validatedData.name,
-				email: validatedData.email,
-				password: validatedData.password
-			}
-		})
-
-		// Verifica se a resposta contém erros (ErrorResponse)
-		if ('errors' in response) {
-			return json({ errors: response.errors } as ErrorResponse, { status: 400 })
-		}
-
-		// Caso a resposta contenha user e token (SuccessResponse)
-		if (response.user && response.token) {
-			return json({ user: response.user, token: response.token } as SuccessResponse, { status: 200 })
-		}
-
-		// Caso nenhuma resposta tenha sido recebida ou resposta inválida
-		return json({ errors: [{ field: null, description: 'Erro desconhecido ao cadastrar o usuário.' }] } as ErrorResponse, { status: 500 })
-	} catch (err) {
-		// Se houver erro na validação, retorna um array de erros
-		if (err instanceof z.ZodError) {
-			const errors = err.errors.map((e) => ({
-				field: String(e.path[0]), // Garantir que 'field' seja uma string
-				description: e.message // Mensagem de erro
-			}))
-
-			return json({ errors } as ErrorResponse, { status: 400 })
-		}
-
-		// Para outros erros inesperados, padroniza a resposta com um array
-		const errorMessage = err instanceof Error ? err.message : 'Erro inesperado no servidor.'
-		return json(
-			{
-				errors: [{ field: null, description: errorMessage }]
-			} as ErrorResponse,
-			{ status: 500 }
-		)
+		body = await request.json()
+	} catch {
+		return json({ success: false, errors: [{ code: 'INVALID_JSON', message: 'O corpo da requisição não é um JSON válido.' }] } as SignInResponse, { status: 400 })
 	}
+
+	// TIPO DE LOGIN
+
+	// Valida o tipo recebido
+	let validatedTypeSchema
+	try {
+		validatedTypeSchema = typeSignInSchema.parse(body)
+	} catch (err) {
+		if (err instanceof z.ZodError) {
+			return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+		}
+		return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+	}
+
+	// LOGIN COM E-MAIL E SENHA
+
+	// Verifica se é do tipo login com e-mail e senha
+	if (validatedTypeSchema.type === 'email') {
+		// Valida os dados recebidos
+		let validatedEmailSchema
+		try {
+			validatedEmailSchema = emailSignInSchema.parse(body)
+		} catch (err) {
+			if (err instanceof z.ZodError) {
+				return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+			}
+			return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// Se o e-mail e a senha forem válidos
+		if (validatedEmailSchema.email && validatedEmailSchema.password) {
+			// Verifica se o e-mail não existe
+			if (!(await checkIfUserEmailExists(validatedEmailSchema.email || ''))) {
+				return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
+			}
+
+			// Chama a API para fazer login com e-mail e senha
+			try {
+				const api = await auth.api.signInEmail({
+					returnHeaders: true,
+					body: {
+						email: validatedEmailSchema.email || '',
+						password: validatedEmailSchema.password || ''
+					}
+				})
+
+				// Verifica se a resposta contém erros
+				if ('errors' in api.response) {
+					return json({ success: false, errors: api.response.errors } as SignInResponse, { status: 400 })
+				}
+
+				// Caso a resposta contenha o 'user' e o 'token', então retorna com sucesso
+				else if (api.response.user && api.response.token) {
+					return json({ success: true, user: api.response.user, token: api.response.token, redirect: api.response.redirect, url: api.response.url } as SignInResponse, { status: 200 })
+				}
+			} catch (err) {
+				const apiErrorCode = (err as { body?: { code?: string } })?.body?.code
+				const errorMessage = apiErrorCode && errorCodes[apiErrorCode as keyof typeof errorCodes] ? errorCodes[apiErrorCode as keyof typeof errorCodes] : 'Erro inesperado no servidor.'
+
+				return json({ success: false, errors: [{ code: apiErrorCode || 'INTERNAL_SERVER_ERROR', message: errorMessage }] } as SignInResponse, { status: 400 })
+			}
+		}
+	}
+
+	// LOGIN COM OTP
+
+	// Verifica se é do tipo login com OTP
+	else if (validatedTypeSchema.type === 'otp') {
+		// Valida os dados recebidos
+		let validatedOtpSchema
+		try {
+			validatedOtpSchema = otpSignInSchema.parse(body)
+		} catch (err) {
+			if (err instanceof z.ZodError) {
+				return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+			}
+			return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// Verifica se o e-mail não existe
+		if (!(await checkIfUserEmailExists(validatedOtpSchema.email || ''))) {
+			return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// ETAPA 1 DO OTP
+
+		// Etapa 1: Se enviou apenas o email
+		if (validatedOtpSchema.email && !validatedOtpSchema.otp) {
+			// Chama a API para enviar OTP para o e-mail do usuário
+			try {
+				const api = await auth.api.sendVerificationOTP({
+					returnHeaders: true,
+					body: {
+						email: validatedOtpSchema.email || '',
+						type: 'sign-in'
+					}
+				})
+
+				// Caso a resposta seja sucesso
+				if (api.response.success) {
+					return json({ success: true } as SignInResponse, { status: 200 })
+				}
+
+				// Caso a resposta não seja sucesso
+				else {
+					return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao enviar o código OTP para o e-mail do usuário.' }] } as SignInResponse, { status: 400 })
+				}
+			} catch {
+				return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao enviar o código OTP para o e-mail do usuário.' }] } as SignInResponse, { status: 400 })
+			}
+		}
+
+		// ETAPA 2 DO OTP
+
+		// Etapa 2: Se enviou o email e o OTP
+		else if (validatedOtpSchema.email && validatedOtpSchema.otp) {
+			// Chama a API para fazer login com o OTP
+			try {
+				const api = await auth.api.signInEmailOTP({
+					returnHeaders: true,
+					body: {
+						email: validatedOtpSchema.email || '',
+						otp: validatedOtpSchema.otp || ''
+					}
+				})
+
+				// Para debugar
+				// console.log('api.response', api.response)
+
+				// Verifica se a resposta contém erros
+				if ('errors' in api.response) {
+					return json({ success: false, errors: api.response.errors } as SignInResponse, { status: 400 })
+				}
+
+				// Caso a resposta contenha o 'user' e o 'token', então retorna com sucesso
+				else if (api.response.user && api.response.token) {
+					return json({ success: true, user: api.response.user, token: api.response.token } as SignInResponse, { status: 200 })
+				}
+			} catch {
+				return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao fazer login com o código OTP.' }] } as SignInResponse, { status: 400 })
+			}
+		}
+	}
+
+	return json({ success: false, errors: [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido no servidor.' }] } as SignInResponse, { status: 500 })
 }

@@ -1,89 +1,98 @@
 import { auth } from '$lib/server/auth'
-import { db } from '$lib/server/db'
-import { users } from '$lib/server/db/schema'
-import { eq } from 'drizzle-orm'
+import { errorCodes } from '$lib/server/auth-utils'
+import { checkIfUserEmailExists } from '$lib/server/db-utils'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
 
-// Definição dos tipos para a resposta
-export type ErrorResponse = {
-	errors: { field: string | null; description: string }[]
-}
-export type SuccessResponse = {
-	user: { id: string; name: string; email: string }
-	token: string | null
+// Tipagem para a resposta da API
+type SignUpResponse = {
+	success: boolean
+	errors?: { field?: string; code: string; message: string }[]
+	user?: { id: string; name: string; email: string }
+	token?: string | null
 }
 
 // Schema de validação com Zod
-const schema = z.object({
-	name: z.string().min(2, 'O nome está muito curto.'),
-	email: z.string().email('O e-mail é inválido.'),
+const signUpSchema = z.object({
+	name: z
+		.string({ required_error: 'O nome é obrigatório.' }) // Garante que o campo é obrigatório
+		.min(2, { message: 'O nome está muito curto.' }) // Garante que o campo tenha pelo menos 2 caracteres
+		.regex(/^[A-Za-zÀ-ÿ\s\-.'À-ÿ]*$/, { message: 'O nome não pode conter caracteres especiais.' }), // Permite espaço, traço, ponto e apóstrofo
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
 	password: z
-		.string()
-		.min(8, 'A senha deve ter pelo menos 8 caracteres.')
-		.regex(/[A-Z]/, 'A senha deve conter pelo menos uma letra maiúscula.')
-		.regex(/[a-z]/, 'A senha deve conter pelo menos uma letra minúscula.')
-		.regex(/\d/, 'A senha deve conter pelo menos um número.')
-		.regex(/[!@#$%^&*(),.?":{}|<>]/, 'A senha deve conter pelo menos um caractere especial.')
+		.string({ required_error: 'A senha é obrigatória.' }) // Garante que a senha é obrigatória
+		.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
+		.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
+		.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
+		.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
+		.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
 })
 
-// Função auxiliar que verifica se o usuário existe no banco de dados através do e-mail
-const userExists = async (email: string) => await db.select().from(users).where(eq(users.email, email)).get()
-
-// Função auxiliar para cadastrar um usuário com email e senha
+// Função para cadastrar um usuário com email e senha
+// Recebe: { name, email, password }
+// Retorna um JSON com a resposta da API do tipo SignUpResponse e o status
 export async function POST({ request }: RequestEvent): Promise<Response> {
+	// Obtem dados do corpo da requisição
+	let body
 	try {
-		// Obter dados do corpo da requisição
-		const body = await request.json()
+		body = await request.json()
+	} catch {
+		return json({ success: false, errors: [{ code: 'INVALID_JSON', message: 'O corpo da requisição não é um JSON válido.' }] } as SignUpResponse, { status: 400 })
+	}
 
-		// Validação com Zod
-		const validatedData = schema.parse(body)
+	// CADASTRAR USUÁRIO COM NOME, EMAIL E SENHA
 
-		// Verifica se o e-mail ja existe
-		if (await userExists(validatedData.email)) {
-			return json({ errors: [{ field: 'email', description: 'E-mail já cadastrado.' }] } as ErrorResponse, { status: 400 })
+	// Valida os dados recebidos
+	let validatedSchema
+	try {
+		validatedSchema = signUpSchema.parse(body)
+	} catch (err) {
+		if (err instanceof z.ZodError) {
+			return json(
+				{
+					success: false,
+					errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
+				} as SignUpResponse,
+				{ status: 400 }
+			)
 		}
+		return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignUpResponse, { status: 400 })
+	}
 
-		// Chama a API para cadastrar o usuário
-		const response = await auth.api.signUpEmail({
+	// Verifica se o e-mail já está cadastrado
+	if (await checkIfUserEmailExists(validatedSchema.email)) {
+		return json({ success: false, errors: [{ field: 'email', code: 'USER_ALREADY_EXISTS', message: 'Usuário já existe.' }] } as SignUpResponse, { status: 400 })
+	}
+
+	// Chama a API para cadastrar o usuário com nome, email e senha
+	try {
+		const api = await auth.api.signUpEmail({
+			returnHeaders: true,
 			body: {
-				name: validatedData.name,
-				email: validatedData.email,
-				password: validatedData.password
+				name: validatedSchema.name,
+				email: validatedSchema.email,
+				password: validatedSchema.password
 			}
 		})
 
-		// Verifica se a resposta contém erros (ErrorResponse)
-		if ('errors' in response) {
-			return json({ errors: response.errors } as ErrorResponse, { status: 400 })
+		// Verifica se a resposta contém erros
+		if ('errors' in api.response) {
+			return json({ success: false, errors: api.response.errors } as SignUpResponse, { status: 400 })
 		}
 
-		// Caso a resposta contenha user e token (SuccessResponse)
-		if (response.user && response.token) {
-			return json({ user: response.user, token: response.token } as SuccessResponse, { status: 200 })
+		// Caso a resposta contenha o 'user', então retorna com sucesso
+		else if (api.response.user) {
+			return json({ success: true, user: api.response.user, token: api.response.token } as SignUpResponse, { status: 200 })
 		}
-
-		// Caso nenhuma resposta tenha sido recebida ou resposta inválida
-		return json({ errors: [{ field: null, description: 'Erro desconhecido ao cadastrar o usuário.' }] } as ErrorResponse, { status: 500 })
 	} catch (err) {
-		// Se houver erro na validação, retorna um array de erros
-		if (err instanceof z.ZodError) {
-			const errors = err.errors.map((e) => ({
-				field: String(e.path[0]), // Garantir que 'field' seja uma string
-				description: e.message // Mensagem de erro
-			}))
+		const apiErrorCode = (err as { body?: { code?: string } })?.body?.code
+		const errorMessage = apiErrorCode && errorCodes[apiErrorCode as keyof typeof errorCodes] ? errorCodes[apiErrorCode as keyof typeof errorCodes] : 'Erro inesperado no servidor.'
 
-			return json({ errors } as ErrorResponse, { status: 400 })
-		}
-
-		// Para outros erros inesperados, padroniza a resposta com um array
-		const errorMessage = err instanceof Error ? err.message : 'Erro inesperado no servidor.'
-		return json(
-			{
-				errors: [{ field: null, description: errorMessage }]
-			} as ErrorResponse,
-			{ status: 500 }
-		)
+		return json({ success: false, errors: [{ code: apiErrorCode || 'INTERNAL_SERVER_ERROR', message: errorMessage }] } as SignUpResponse, { status: 400 })
 	}
+
+	return json({ success: false, errors: [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido no servidor.' }] } as SignUpResponse, { status: 500 })
 }
