@@ -1,3 +1,5 @@
+// Esse arquivo só é usado na API /api/utils/sign-in e /api/utils/sign-up.
+
 import { db } from '$lib/server/db'
 import { users } from '$lib/server/db/schema'
 import { eq } from 'drizzle-orm'

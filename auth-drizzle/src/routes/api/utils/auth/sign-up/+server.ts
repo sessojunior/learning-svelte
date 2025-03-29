@@ -1,6 +1,6 @@
 import { auth } from '$lib/server/auth'
-import { errorCodes } from '$lib/server/auth-utils'
-import { checkIfUserEmailExists } from '$lib/server/db-utils'
+import { errorCodes } from '$lib/utils/auth'
+import { checkIfUserEmailExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'

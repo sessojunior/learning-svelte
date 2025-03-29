@@ -3,11 +3,15 @@ import { env } from '$env/dynamic/private'
 
 // Enviar e-mail
 // Retorna um objeto: { success: boolean, error?: string }
-export const sendEmail = async (
-	to: string,
-	subject: string,
+export const sendEmail = async ({
+	to,
+	subject,
+	text
+}: {
+	to: string
+	subject: string
 	text: string
-): Promise<{
+}): Promise<{
 	success: boolean
 	error?: { code: string; message: string }
 }> => {

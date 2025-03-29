@@ -79,17 +79,19 @@ export const db = drizzle(client, { schema })
 
 ```typescript
 import { betterAuth } from 'better-auth'
+import { emailOTP } from 'better-auth/plugins'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { db } from '$lib/server/db' // Não utilizar '$lib/server/db' se for usar o comando 'npx @better-auth/cli@latest generate'
 // import * as schema from '../lib/server/db/schema' // Não utilizar '$lib/server/db/schema' se for usar o comando 'npx @better-auth/cli@latest generate'
-import { emailOTP } from 'better-auth/plugins'
+
+import { sendEmail } from '$lib/utils/email'
 
 // Cria uma instância do Better Auth e exporta como `auth`
 export const auth = betterAuth({
 	// Modifica o caminho base para a rota de API de autenticação manipulada em 'hooks.server.ts'.
 	// Isso é importante caso venha a ser usado no futuro o manipulador de rotas `src/hooks.server.ts` junto com as funções do lado do cliente `auth-client.ts`
 	// Se os arquivos `hooks.server.ts` e `auth-client.ts` não estiverem no projeto, podemos ignorar adicionar o 'basePath'
-	basePath: '/api/better-auth', // Padrão: '/api/auth'. Muito importante alterar para '/api/better-auth' ou outra rota, para evitar interferências com as rotas de API próprias que estão em /api/auth
+	// basePath: '/api/auth', // Padrão: '/api/auth'. Para evitar interferências com as rotas de API próprias, utilize uma rota diferente de '/api/auth'
 	// Configura o banco de dados a ser usado com o adaptador do Drizzle
 	database: drizzleAdapter(db, {
 		provider: 'sqlite', // Pode ser: 'mysql', 'pg', 'sqlite'
@@ -106,6 +108,19 @@ export const auth = betterAuth({
 		enabled: true,
 		autoSignIn: true, // Padrão: true
 		requireEmailVerification: true // Padrão: false. Habilitando requer que o usuário verifique seu e-mail antes de fazer login
+	},
+	// Verificação de e-mail
+	// A rota de verificação de e-mail depende da existência do arquivo 'src/hooks.server.ts'
+	// E também depende da configuração em basePath, neste arquivo '$lib/server/auth.ts'
+	emailVerification: {
+		sendVerificationEmail: async ({ user, url }) => {
+			// Enviar e-mail de verificação de e-mail
+			sendEmail({
+				to: user.email,
+				subject: 'Verificação de e-mail',
+				text: `Clique no link para verificar seu e-mail e confirmar sua conta: \n\n${url}`
+			})
+		}
 	},
 	// Autenticação por provedor social
 	socialProviders: {
@@ -139,23 +154,44 @@ export const auth = betterAuth({
 			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Para evitar isso, você deve passar 'disableSignUp' como true
 			// Envia o OTP
 			async sendVerificationOTP({ email, otp, type }) {
-				// Implement the sendVerificationOTP method to send the OTP to the user's email address
-				console.log('email', email, 'otp', otp, 'type', type)
+				// Enviar e-mail com o código OTP
+				sendEmail({
+					to: email,
+					subject: 'Código de verificação',
+					text: `Utilize o seguinte código de verificação ${type === 'sign-in' ? 'para fazer login' : type === 'email-verification' ? 'para verificar seu e-mail' : type === 'forget-password' ? 'para recuperar sua senha' : 'a seguir'}: ${otp}`
+				})
 			}
 		})
 	]
 })
 ```
 
-Não será necessário criar o arquivo `src/hooks.server.ts`, pois não haverá um manipulador de rotas que utilizará o `auth-client.ts`, pois faremos requisições via
+6. Crie o arquivo `src/hooks.server.ts`, que será o manipulador de rotas que utilizará o `auth-client.ts` para algumas funções de autenticação. Deixe-o assim:
 
-Não será necessário criar o arquivo `lib/auth-client.ts`, pois não utilizaremos uma instância do cliente, já que faremos uso apenas de API.
+```typescript
+import { auth } from '$lib/server/auth'
+import { svelteKitHandler } from 'better-auth/svelte-kit'
 
-6. Gere o esquema do banco de dados com o comando: `npx @better-auth/cli@latest generate`.
+export async function handle({ event, resolve }) {
+	return svelteKitHandler({ event, resolve, auth })
+}
+```
+
+7. Crie o arquivo `lib/auth-client.ts` para interagir com o servidor de autenticação. É melhor utilizar ele que uma API própria de autenticação, pois ele já cuida de criar os cookies e sessões. Deixe-o assim:
+
+```typescript
+import { createAuthClient } from 'better-auth/svelte'
+
+export const authClient = createAuthClient()
+```
+
+Após já ter configurado os plugins em `$lib/server/auth.ts`, você já pode gerar o esquema do banco de dados.
+
+8. Gere o esquema do banco de dados com o comando: `npx @better-auth/cli@latest generate`.
 
 Após gerar o esquema, será criado automaticamente o arquivo `auth-schema.ts` na raiz do projeto.
 
-O migrate só funciona com o adaptador Kysely. Para o Drizzle iremos utilizar o migrate do Drizzle ou push para aplicar as alterações.
+Como estamos utilizando o Drizzle ORM, iremos utilizar o migrate do Drizzle ou push para aplicar as alterações.
 
 Então, vamos copiar o conteúdo de `auth-schema.ts` e substituir todo o conteúdo de `src/lib/db/schema.ts`. Em seguida iremos apagar o `auth-schema.ts`.
 
@@ -217,121 +253,132 @@ export const verifications = sqliteTable('verifications', {
 
 Em seguida, criaremos o arquivo do banco de dados fazendo um push com o comando: `npm run db:push`.
 
-7. Deixe o arquivo 'src/routes/+page.svelte' assim:
+9. Deixe o arquivo 'src/routes/+page.svelte' assim:
 
 ```html
 <h1>Autenticação com Sveltekit, Drizzle e Better Auth</h1>
 
 <p>Clique em um dos botões abaixo para prosseguir:</p>
-<p><a href="/signup">Cadastre-se</a> ou <a href="/signin">Login</a></p>
+<p><a href="/sign-up">Cadastre-se</a> ou <a href="/sign-in">Login</a></p>
 ```
 
-8. Deixe o arquivo 'src/routes/api/signup/+server.ts' assim:
+10. Deixe o arquivo 'src/routes/api/utils/sign-up/+server.ts' assim:
 
 ```typescript
 import { auth } from '$lib/server/auth'
-import { db } from '$lib/server/db'
-import { users } from '$lib/server/db/schema'
-import { eq } from 'drizzle-orm'
+import { errorCodes } from '$lib/utils/auth'
+import { checkIfUserEmailExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
 
-// Definição dos tipos para a resposta
-export type ErrorResponse = {
-	errors: { field: string | null; description: string }[]
-}
-export type SuccessResponse = {
-	user: { id: string; name: string; email: string }
-	token: string | null
+// Tipagem para a resposta da API
+type SignUpResponse = {
+	success: boolean
+	errors?: { field?: string; code: string; message: string }[]
+	user?: { id: string; name: string; email: string }
+	token?: string | null
 }
 
 // Schema de validação com Zod
-const schema = z.object({
-	name: z.string().min(2, 'O nome está muito curto.'),
-	email: z.string().email('O e-mail é inválido.'),
+const signUpSchema = z.object({
+	name: z
+		.string({ required_error: 'O nome é obrigatório.' }) // Garante que o campo é obrigatório
+		.min(2, { message: 'O nome está muito curto.' }) // Garante que o campo tenha pelo menos 2 caracteres
+		.regex(/^[A-Za-zÀ-ÿ\s\-.'À-ÿ]*$/, { message: 'O nome não pode conter caracteres especiais.' }), // Permite espaço, traço, ponto e apóstrofo
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
 	password: z
-		.string()
-		.min(8, 'A senha deve ter pelo menos 8 caracteres.')
-		.regex(/[A-Z]/, 'A senha deve conter pelo menos uma letra maiúscula.')
-		.regex(/[a-z]/, 'A senha deve conter pelo menos uma letra minúscula.')
-		.regex(/\d/, 'A senha deve conter pelo menos um número.')
-		.regex(/[!@#$%^&*(),.?":{}|<>]/, 'A senha deve conter pelo menos um caractere especial.')
+		.string({ required_error: 'A senha é obrigatória.' }) // Garante que a senha é obrigatória
+		.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
+		.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
+		.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
+		.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
+		.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
 })
 
-// Função auxiliar que verifica se o usuário existe no banco de dados através do e-mail
-const userExists = async (email: string) => await db.select().from(users).where(eq(users.email, email)).get()
-
-// Função auxiliar para cadastrar um usuário com email e senha
+// Função para cadastrar um usuário com email e senha
+// Recebe: { name, email, password }
+// Retorna um JSON com a resposta da API do tipo SignUpResponse e o status
 export async function POST({ request }: RequestEvent): Promise<Response> {
+	// Obtem dados do corpo da requisição
+	let body
 	try {
-		// Obter dados do corpo da requisição
-		const body = await request.json()
+		body = await request.json()
+	} catch {
+		return json({ success: false, errors: [{ code: 'INVALID_JSON', message: 'O corpo da requisição não é um JSON válido.' }] } as SignUpResponse, { status: 400 })
+	}
 
-		// Validação com Zod
-		const validatedData = schema.parse(body)
+	// CADASTRAR USUÁRIO COM NOME, EMAIL E SENHA
 
-		// Verifica se o e-mail ja existe
-		if (await userExists(validatedData.email)) {
-			return json({ errors: [{ field: 'email', description: 'E-mail já cadastrado.' }] } as ErrorResponse, { status: 400 })
+	// Valida os dados recebidos
+	let validatedSchema
+	try {
+		validatedSchema = signUpSchema.parse(body)
+	} catch (err) {
+		if (err instanceof z.ZodError) {
+			return json(
+				{
+					success: false,
+					errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
+				} as SignUpResponse,
+				{ status: 400 }
+			)
 		}
+		return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignUpResponse, { status: 400 })
+	}
 
-		// Chama a API para cadastrar o usuário
-		const response = await auth.api.signUpEmail({
+	// Verifica se o e-mail já está cadastrado
+	if (await checkIfUserEmailExists(validatedSchema.email)) {
+		return json({ success: false, errors: [{ field: 'email', code: 'USER_ALREADY_EXISTS', message: 'Usuário já existe.' }] } as SignUpResponse, { status: 400 })
+	}
+
+	// Chama a API para cadastrar o usuário com nome, email e senha
+	try {
+		const api = await auth.api.signUpEmail({
+			returnHeaders: true,
 			body: {
-				name: validatedData.name,
-				email: validatedData.email,
-				password: validatedData.password
+				name: validatedSchema.name,
+				email: validatedSchema.email,
+				password: validatedSchema.password
 			}
 		})
 
-		// Verifica se a resposta contém erros (ErrorResponse)
-		if ('errors' in response) {
-			return json({ errors: response.errors } as ErrorResponse, { status: 400 })
+		// Verifica se a resposta contém erros
+		if ('errors' in api.response) {
+			return json({ success: false, errors: api.response.errors } as SignUpResponse, { status: 400 })
 		}
 
-		// Caso a resposta contenha user e token (SuccessResponse)
-		if (response.user && response.token) {
-			return json({ user: response.user, token: response.token } as SuccessResponse, { status: 200 })
+		// Caso a resposta contenha o 'user', então retorna com sucesso
+		else if (api.response.user) {
+			return json({ success: true, user: api.response.user, token: api.response.token } as SignUpResponse, { status: 200 })
 		}
-
-		// Caso nenhuma resposta tenha sido recebida ou resposta inválida
-		return json({ errors: [{ field: null, description: 'Erro desconhecido ao cadastrar o usuário.' }] } as ErrorResponse, { status: 500 })
 	} catch (err) {
-		// Se houver erro na validação, retorna um array de erros
-		if (err instanceof z.ZodError) {
-			const errors = err.errors.map((e) => ({
-				field: String(e.path[0]), // Garantir que 'field' seja uma string
-				description: e.message // Mensagem de erro
-			}))
+		const apiErrorCode = (err as { body?: { code?: string } })?.body?.code
+		const errorMessage = apiErrorCode && errorCodes[apiErrorCode as keyof typeof errorCodes] ? errorCodes[apiErrorCode as keyof typeof errorCodes] : 'Erro inesperado no servidor.'
 
-			return json({ errors } as ErrorResponse, { status: 400 })
-		}
-
-		// Para outros erros inesperados, padroniza a resposta com um array
-		const errorMessage = err instanceof Error ? err.message : 'Erro inesperado no servidor.'
-		return json(
-			{
-				errors: [{ field: null, description: errorMessage }]
-			} as ErrorResponse,
-			{ status: 500 }
-		)
+		return json({ success: false, errors: [{ code: apiErrorCode || 'INTERNAL_SERVER_ERROR', message: errorMessage }] } as SignUpResponse, { status: 400 })
 	}
+
+	return json({ success: false, errors: [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido no servidor.' }] } as SignUpResponse, { status: 500 })
 }
 ```
 
-9. Deixe o arquivo 'src/routes/api/signup/+page.svelte' assim:
+11. Deixe o arquivo 'src/routes/(auth)/sign-up/+page.svelte' assim:
 
 ```typescript
 <script lang="ts">
 	import { goto } from '$app/navigation'
 
+	// Dados para cadastro
 	let name = $state('')
 	let email = $state('')
 	let password = $state('')
 
+	// Carregando e erros
 	let loading = $state(false)
-	let errors: { field: string | null; description: string }[] = $state([])
+	let errors: { field?: string; code: string; message: string }[] = $state([])
 
 	// Mapeamento de campos para nomes amigáveis
 	const fieldName: Record<string, string> = {
@@ -345,32 +392,32 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		loading = true
 		errors = [] // Reseta a mensagem de erro antes de tentar cadastrar novamente
 
-		// Chama a API de cadastro
-		const response = await fetch('/api/auth/signup', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ name, email, password })
-		})
-
-		loading = false // Desativa o loading após a resposta da API
-
 		try {
+			// Chama a API de cadastro
+			const response = await fetch('/api/auth/sign-up', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name, email, password })
+			})
+
+			loading = false // Desativa o loading após a resposta da API
+
 			const data = await response.json() // Resposta da API
 
 			// Se foi feito o cadastro
-			if (response.ok) {
-				goto('/dashboard') // Redireciona para o dashboard
+			if (response.ok && data.success) {
+				goto('/app/dashboard') // Redireciona para o dashboard
 			} else {
 				// Se houve erros recebidos pela API
 				if (data.errors) {
 					errors = data.errors
 				} else {
-					errors = [{ field: null, description: 'Erro desconhecido ao realizar o cadastro do usuário.' }]
+					errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao realizar o cadastro do usuário.' }]
 				}
 			}
 		} catch (err) {
 			console.error('Erro ao processar a resposta:', err)
-			errors = [{ field: null, description: 'Erro ao processar a resposta da API.' }]
+			errors = [{ code: 'PROCCESS_ERROR', message: 'Erro ao processar a resposta da API.' }]
 		}
 	}
 </script>
@@ -380,14 +427,13 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 <!-- Exibição de erros globais -->
 {#if errors.length > 0}
 	<div>
-		{#each errors as { field, description }}
-			{#if field === null}
-				<p>Mensagem: {description}</p>
+		{#each errors as { field, message }}
+			{#if !field}
 				<!-- Erro geral, como 'Erro desconhecido' -->
+				<p>Mensagem: {message}</p>
 			{:else}
-				<!-- Exibe o nome amigável do campo -->
-				<p>{fieldName[field] || field}: {description}</p>
 				<!-- Erro específico do campo -->
+				<p>{fieldName[field] || field}: {message}</p>
 			{/if}
 		{/each}
 	</div>
@@ -405,10 +451,9 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 			Nome:
 			<input type="text" bind:value={name} autocomplete="name" minlength="2" required />
 		</label>
-		{#each errors as { field, description }}
+		{#each errors as { field, message }}
 			{#if field === 'name'}
-				<p class="error">{description}</p>
-				<!-- Exibe o erro se existir -->
+				<p class="error">{message}</p>
 			{/if}
 		{/each}
 	</div>
@@ -419,10 +464,9 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 			Email:
 			<input type="email" bind:value={email} autocomplete="email" required />
 		</label>
-		{#each errors as { field, description }}
+		{#each errors as { field, message }}
 			{#if field === 'email'}
-				<p class="error">{description}</p>
-				<!-- Exibe o erro se existir -->
+				<p class="error">{message}</p>
 			{/if}
 		{/each}
 	</div>
@@ -433,10 +477,9 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 			Senha:
 			<input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
 		</label>
-		{#each errors as { field, description }}
+		{#each errors as { field, message }}
 			{#if field === 'password'}
-				<p class="error">{description}</p>
-				<!-- Exibe o erro se existir -->
+				<p class="error">{message}</p>
 			{/if}
 		{/each}
 	</div>
@@ -450,7 +493,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 </form>
 
 <div>
-	<p>Já possui uma conta? <a href="/signin">Faça login</a></p>
+	<p>Já possui uma conta? <a href="/sign-in">Faça login</a></p>
 </div>
 
 <!--
@@ -460,7 +503,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 	Ou usar: var(--text-red-500);
 -->
 <style>
-	@reference "../../app.css";
+	@reference "../../../app.css";
 
 	.error {
 		@apply text-sm text-red-500;
@@ -468,7 +511,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 </style>
 ```
 
-10. Deixe o arquivo 'src/routes/dashboard/+page.svelte' assim:
+12. Deixe o arquivo 'src/routes/app/dashboard/+page.svelte' assim:
 
 ```typescript
 <script lang="ts">
@@ -483,7 +526,8 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		await authClient.signOut({
 			fetchOptions: {
 				onSuccess: () => {
-					goto('/signin') // Redireciona para a página de login
+					// Redireciona para a página de login
+					goto('/sign-in')
 				}
 			}
 		})
@@ -507,10 +551,10 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 {/if}
 ```
 
-11. Crie o arquivo 'src/routes/dashboard/+page.server.ts' com o seguinte conteúdo:
+13. Crie o arquivo 'src/routes/dashboard/+page.server.ts' com o seguinte conteúdo:
 
 ```typescript
-import { auth } from '$lib/auth'
+import { auth } from '$lib/server/auth'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
@@ -522,7 +566,7 @@ export const load: PageServerLoad = async ({ request }) => {
 
 	// Se não houver usuário na sessão, redireciona para o login
 	if (!session?.user) {
-		throw redirect(302, '/signin') // Redireciona para o login
+		throw redirect(302, '/sign-in') // Redireciona para o login
 	}
 
 	// Retorna os dados da sessão para serem usados na página
@@ -530,112 +574,484 @@ export const load: PageServerLoad = async ({ request }) => {
 }
 ```
 
-12. Crie o arquivo 'src/routes/signin/+page.svelte' com o seguinte conteúdo:
+14. Deixe o arquivo 'src/routes/api/utils/sign-in/+server.ts' assim:
 
-```
-<script lang="ts">
-	import { authClient } from '$lib/auth-client'
+```typescript
+import { auth } from '$lib/server/auth'
+import { errorCodes } from '$lib/utils/auth'
+import { checkIfUserEmailExists } from '$lib/server/utils/db'
 
-	let email = $state('')
-	let password = $state('')
-	let loading = $state(false)
-	let errorMessage: string | null = $state('')
+import { json, type RequestEvent } from '@sveltejs/kit'
+import { z } from 'zod'
 
-	// Função de login com e-mail e senha
-	async function handleSignInEmail() {
-		loading = true
+// Tipagem para a resposta da API
+type SignInResponse = {
+	success: boolean
+	errors?: { field?: string; code: string; message: string }[]
+	user?: { id: string; name: string; email: string; image: string | null | undefined; emailVerified: boolean }
+	token?: string | null
+}
 
-		const { data, error } = await authClient.signIn.email(
-			{
-				email, // E-mail
-				password, // Senha
-				rememberMe: true, // Padrão: true. Lembra a sessão do usuário após o navegador ser fechado
-				callbackURL: '/dashboard' // URL de redirecionamento depois que o usuário verificar seu e-mail (opcional)
-			},
-			{
-				onRequest: (context) => {
-					// Exibir o loading
-					loading = true
-				},
-				onSuccess: (context) => {
-					// Redireciona ao dashboard ou página de login
-				},
-				onError: (context) => {
-					// Exibe a mensagem de erro
-					errorMessage = context.error.message
-					loading = false
-					alert(context.error.message)
-				}
-			}
-		)
-		errorMessage = error?.statusText ?? null
-		console.log('data', data)
-		console.log('error', error)
+// Schema de validação com Zod: tipo
+const typeSignInSchema = z.object({
+	type: z.enum(['email', 'otp', 'social'], {
+		invalid_type_error: 'Você deve enviar a forma correta que deseja fazer login.',
+		required_error: 'O tipo de login é obrigatório.'
+	})
+})
+
+// Schema de validação com Zod: tipo email
+const emailSignInSchema = z.object({
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+	password: z
+		.string({ required_error: 'A senha é obrigatória.' }) // Garante que a senha é obrigatória
+		.regex(/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/, { message: 'A senha é inválida.' }) //Garante que a senha atende a todos os requisitos: pelo menos uma letra maiúscula, pelo menos uma letra minúscula, pelo menos um número e pelo menos um caractere especial
+})
+
+// Schema de validação com Zod: tipo otp
+const otpSignInSchema = z.object({
+	email: z
+		.string({ required_error: 'O e-mail é obrigatório.' }) // Garante que o e-mail é obrigatório
+		.email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+	otp: z
+		.string() // Garante que seja uma string
+		.regex(/^\d{6}$/, { message: 'O código é inválido.' }) // Garante que o OTP seja composto por exatamente 6 números
+		.optional() // Garante que o OTP é opcional
+})
+
+// Função para fazer login
+// Recebe para login com e-mail e senha: { type, email, password }
+// Recebe para login com OTP: { type, email } ou { type, email, otp }
+// Retorna um JSON com a resposta da API do tipo SignInResponse e o status
+export async function POST({ request }: RequestEvent): Promise<Response> {
+	// Obtem dados do corpo da requisição
+	let body
+	try {
+		body = await request.json()
+	} catch {
+		return json({ success: false, errors: [{ code: 'INVALID_JSON', message: 'O corpo da requisição não é um JSON válido.' }] } as SignInResponse, { status: 400 })
 	}
 
-	async function handleSignInSocial(provider: 'google' | 'facebook' | 'twitter' | 'apple' | 'microsoft' | 'linkedin') {
+	// TIPO DE LOGIN
+
+	// Valida o tipo recebido
+	let validatedTypeSchema
+	try {
+		validatedTypeSchema = typeSignInSchema.parse(body)
+	} catch (err) {
+		if (err instanceof z.ZodError) {
+			return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+		}
+		return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+	}
+
+	// LOGIN COM E-MAIL E SENHA
+
+	// Verifica se é do tipo login com e-mail e senha
+	if (validatedTypeSchema.type === 'email') {
+		// Valida os dados recebidos
+		let validatedEmailSchema
+		try {
+			validatedEmailSchema = emailSignInSchema.parse(body)
+		} catch (err) {
+			if (err instanceof z.ZodError) {
+				return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+			}
+			return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// Se o e-mail e a senha forem válidos
+		if (validatedEmailSchema.email && validatedEmailSchema.password) {
+			// Verifica se o e-mail não existe
+			if (!(await checkIfUserEmailExists(validatedEmailSchema.email || ''))) {
+				return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
+			}
+
+			// Chama a API para fazer login com e-mail e senha
+			try {
+				const api = await auth.api.signInEmail({
+					returnHeaders: true,
+					body: {
+						email: validatedEmailSchema.email || '',
+						password: validatedEmailSchema.password || ''
+					}
+				})
+
+				// Verifica se a resposta contém erros
+				if ('errors' in api.response) {
+					return json({ success: false, errors: api.response.errors } as SignInResponse, { status: 400 })
+				}
+
+				// Caso a resposta contenha o 'user' e o 'token', então retorna com sucesso
+				else if (api.response.user && api.response.token) {
+					return json({ success: true, user: api.response.user, token: api.response.token, redirect: api.response.redirect, url: api.response.url } as SignInResponse, { status: 200 })
+				}
+			} catch (err) {
+				const apiErrorCode = (err as { body?: { code?: string } })?.body?.code
+				const errorMessage = apiErrorCode && errorCodes[apiErrorCode as keyof typeof errorCodes] ? errorCodes[apiErrorCode as keyof typeof errorCodes] : 'Erro inesperado no servidor.'
+
+				return json({ success: false, errors: [{ code: apiErrorCode || 'INTERNAL_SERVER_ERROR', message: errorMessage }] } as SignInResponse, { status: 400 })
+			}
+		}
+	}
+
+	// LOGIN COM OTP
+
+	// Verifica se é do tipo login com OTP
+	else if (validatedTypeSchema.type === 'otp') {
+		// Valida os dados recebidos
+		let validatedOtpSchema
+		try {
+			validatedOtpSchema = otpSignInSchema.parse(body)
+		} catch (err) {
+			if (err instanceof z.ZodError) {
+				return json({ success: false, errors: err.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message })) } as SignInResponse, { status: 400 })
+			}
+			return json({ success: false, errors: [{ code: 'VALIDATION_ERROR', message: 'Erro na validação dos dados.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// Verifica se o e-mail não existe
+		if (!(await checkIfUserEmailExists(validatedOtpSchema.email || ''))) {
+			return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
+		}
+
+		// ETAPA 1 DO OTP
+
+		// Etapa 1: Se enviou apenas o email
+		if (validatedOtpSchema.email && !validatedOtpSchema.otp) {
+			// Chama a API para enviar OTP para o e-mail do usuário
+			try {
+				const api = await auth.api.sendVerificationOTP({
+					returnHeaders: true,
+					body: {
+						email: validatedOtpSchema.email || '',
+						type: 'sign-in'
+					}
+				})
+
+				// Caso a resposta seja sucesso
+				if (api.response.success) {
+					return json({ success: true } as SignInResponse, { status: 200 })
+				}
+
+				// Caso a resposta não seja sucesso
+				else {
+					return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao enviar o código OTP para o e-mail do usuário.' }] } as SignInResponse, { status: 400 })
+				}
+			} catch {
+				return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao enviar o código OTP para o e-mail do usuário.' }] } as SignInResponse, { status: 400 })
+			}
+		}
+
+		// ETAPA 2 DO OTP
+
+		// Etapa 2: Se enviou o email e o OTP
+		else if (validatedOtpSchema.email && validatedOtpSchema.otp) {
+			// Chama a API para fazer login com o OTP
+			try {
+				const api = await auth.api.signInEmailOTP({
+					returnHeaders: true,
+					body: {
+						email: validatedOtpSchema.email || '',
+						otp: validatedOtpSchema.otp || ''
+					}
+				})
+
+				// Para debugar
+				// console.log('api.response', api.response)
+
+				// Verifica se a resposta contém erros
+				if ('errors' in api.response) {
+					return json({ success: false, errors: api.response.errors } as SignInResponse, { status: 400 })
+				}
+
+				// Caso a resposta contenha o 'user' e o 'token', então retorna com sucesso
+				else if (api.response.user && api.response.token) {
+					return json({ success: true, user: api.response.user, token: api.response.token } as SignInResponse, { status: 200 })
+				}
+			} catch {
+				return json({ success: false, errors: [{ code: 'API_ERROR', message: 'Erro ao fazer login com o código OTP.' }] } as SignInResponse, { status: 400 })
+			}
+		}
+	}
+
+	return json({ success: false, errors: [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido no servidor.' }] } as SignInResponse, { status: 500 })
+}
+```
+
+15. Crie o arquivo 'src/routes/sign-in/+page.svelte' com o seguinte conteúdo:
+
+```typescript
+<script lang="ts">
+	import { goto } from '$app/navigation'
+
+	// Tipo de login: 'email', 'otp', 'social'
+	let type = $state('email')
+
+	// Dados para login por e-mail
+	let email = $state('')
+	let password = $state('')
+
+	// Dados para login com OTP
+	let stepOtp = $state(1)
+	let otp = $state(null)
+
+	// Carregando e erros
+	let loading = $state(false)
+	let errors: { field?: string; code: string; message: string }[] = $state([])
+
+	// Mapeamento de campos para nomes amigáveis
+	const fieldName: Record<string, string> = {
+		name: 'Nome',
+		email: 'E-mail',
+		password: 'Senha'
+	}
+
+	// Login com e-mail e senha
+	const handleSignInEmail = async () => {
 		loading = true
 
-		const { data, error } = await authClient.signIn.social(
-			{
-				provider: provider, // Nome do provedor social
-				callbackURL: '/dashboard', // URL de redirecionamento depois que o usuário verificar seu e-mail (opcional)
-				errorCallbackURL: '/error', // URL de redirecionamento em caso de erro durante o processo de login social
-				newUserCallbackURL: '/welcome', // URL de redirecionamento para a página de boas-vindas para novos usuários
-				disableRedirect: true // Padrão: false.Desabilita o redirecionamento automático para o provedor social
-			},
-			{
-				onRequest: (context) => {
-					// Exibir o loading
-					loading = true
-				},
-				onSuccess: (context) => {
-					// Redireciona ao dashboard ou página de login
-				},
-				onError: (context) => {
-					// Exibe a mensagem de erro
-					errorMessage = context.error.message
-					loading = false
-					alert(context.error.message)
+		// Reseta a mensagem de erro antes de tentar fazer login novamente
+		errors = []
+
+		try {
+			// Chama a API de login
+			const response = await fetch('/api/auth/sign-in', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'email', email, password })
+			})
+
+			loading = false // Desativa o loading após a resposta da API
+
+			const data = await response.json() // Resposta da API
+
+			// Se foi feito o login
+			if (response.ok && data.success) {
+				// Redireciona para o dashboard
+				goto('/app/dashboard')
+			} else {
+				// Se houve erros recebidos pela API
+				if (data.errors) {
+					errors = data.errors
+				} else {
+					errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
 				}
 			}
-		)
-		errorMessage = error?.statusText ?? null
-		console.log('data', data)
-		console.log('error', error)
+		} catch (err) {
+			console.error('Erro ao processar a resposta:', err)
+			errors = [{ code: 'PROCCESS_ERROR', message: 'Erro ao processar a resposta da API.' }]
+		}
+	}
+
+	// Login com OTP
+	const handleSignInOtp = async () => {
+		try {
+			// Se for o passo 1 do OTP
+			if (stepOtp === 1) {
+				// Se preencheu o e-mail
+				if (email) {
+					loading = true
+					errors = []
+
+					// Chama a API de login
+					const response = await fetch('/api/auth/sign-in', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'otp', email })
+					})
+
+					loading = false // Desativa o loading após a resposta da API
+
+					const data = await response.json() // Resposta da API
+
+					// Se foi enviado o OTP por e-mail
+					if (response.ok && data.success) {
+						// Avança para o passo 2 do OTP
+						stepOtp = 2
+						// Reseta a mensagem de erro antes de tentar fazer login novamente
+						errors = []
+					} else {
+						// Se houve erros recebidos pela API
+						if (data.errors) {
+							errors = data.errors
+						} else {
+							errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
+						}
+					}
+				}
+			}
+
+			// Se for o passo 2 do OTP
+			if (stepOtp === 2) {
+				// Se preencheu o e-mail e o OTP
+				if (email && otp) {
+					loading = true
+					errors = []
+
+					// Chama a API de login
+					const response = await fetch('/api/auth/sign-in', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'otp', email, otp })
+					})
+
+					loading = false // Desativa o loading após a resposta da API
+
+					const data = await response.json() // Resposta da API
+
+					// Se o OTP corresponder ao fornecido
+					if (response.ok && data.success) {
+						// Redireciona para o dashboard
+						goto('/app/dashboard')
+					} else {
+						// Se houve erros recebidos pela API
+						if (data.errors) {
+							errors = data.errors
+						} else {
+							errors = [{ code: 'UNKNOWN', message: 'Erro desconhecido ao fazer o login.' }]
+						}
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Erro ao processar a resposta:', err)
+			errors = [{ code: 'PROCCESS_ERROR', message: 'Erro ao processar a resposta da API.' }]
+		}
 	}
 </script>
 
 <h1>Login</h1>
 
-<form onsubmit={handleSignInEmail}>
-	<h1>Criar conta</h1>
+<!-- Exibição de erros globais -->
+{#if errors.length > 0}
 	<div>
-		{#if errorMessage}
-			<p>{errorMessage}</p>
-		{/if}
+		{#each errors as { field, message }}
+			{#if !field}
+				<!-- Erro geral, como 'Erro desconhecido' -->
+				<p>Mensagem: {message}</p>
+			{:else}
+				<!-- Erro específico do campo -->
+				<p>{fieldName[field] || field}: {message}</p>
+			{/if}
+		{/each}
 	</div>
-	<div>
-		<label>
-			Email:
-			<input type="email" bind:value={email} autocomplete="email" required />
-		</label>
-	</div>
-	<div>
-		<label>
-			Senha:
-			<input type="password" bind:value={password} autocomplete="new-password" required />
-		</label>
-	</div>
-	<div>
-		<button type="submit" disabled={loading}>
-			{loading ? 'Entrando...' : 'Entrar'}
-		</button>
-	</div>
-	<div>
-		<button type="button" onclick={() => handleSignInSocial('google')}>
-			{loading ? 'Entrando...' : 'Entrar com Google'}
-		</button>
-	</div>
-</form>
+{/if}
+
+<!-- Tipo de autenticação -->
+<div>
+	<p>Escolha a forma como deseja fazer login:</p>
+	<select bind:value={type}>
+		<option value="email">E-mail</option>
+		<option value="otp">OTP</option>
+		<option value="social">Social</option>
+	</select>
+</div>
+
+{#if type === 'email'}
+	<!-- Login por e-mail e senha -->
+	<form onsubmit={handleSignInEmail}>
+		<div>
+			<p>Informe os dados abaixo para fazer o login.</p>
+		</div>
+		<div>
+			<label>
+				Email:
+				<input type="email" bind:value={email} autocomplete="email" required />
+			</label>
+			{#each errors as { field, message }}
+				{#if field === 'email'}
+					<p class="error">{message}</p>
+				{/if}
+			{/each}
+		</div>
+		<div>
+			<label>
+				Senha:
+				<input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
+			</label>
+			{#each errors as { field, message }}
+				{#if field === 'password'}
+					<p class="error">{message}</p>
+				{/if}
+			{/each}
+		</div>
+		<div>
+			<button type="submit" disabled={loading}>
+				{loading ? 'Entrando...' : 'Entrar'}
+			</button>
+		</div>
+	</form>
+{:else if type === 'otp'}
+	<!-- Login por OTP -->
+	{#if stepOtp === 1}
+		<!-- Login por OTP: Etapa 1 (informar o e-mail) -->
+		<form onsubmit={handleSignInOtp}>
+			<div>
+				<p>Informe o e-mail abaixo para fazer o login. Enviaremos um código por e-mail que deverá ser informado na próxima etapa.</p>
+			</div>
+			<div>
+				<label>
+					Email:
+					<input type="email" bind:value={email} autocomplete="email" required />
+				</label>
+				{#each errors as { field, message }}
+					{#if field === 'email'}
+						<p class="error">{message}</p>
+					{/if}
+				{/each}
+			</div>
+			<div>
+				<button type="submit" disabled={loading}>
+					{loading ? 'Enviando código...' : 'Enviar código'}
+				</button>
+			</div>
+		</form>
+	{:else if stepOtp === 2}
+		<!-- Login por OTP: Etapa 2 (informar o OTP) -->
+		<form onsubmit={handleSignInOtp}>
+			<div>
+				<p>Informe o OTP abaixo para fazer o login.</p>
+			</div>
+			<div>
+				<label>
+					OTP:
+					<input type="text" bind:value={otp} required />
+				</label>
+				{#each errors as { field, message }}
+					{#if field === 'otp'}
+						<p class="error">{message}</p>
+					{/if}
+				{/each}
+			</div>
+			<div>
+				<button type="submit" disabled={loading}>
+					{loading ? 'Entrando...' : 'Entrar'}
+				</button>
+			</div>
+		</form>
+	{/if}
+{:else if type === 'social'}
+	<div>Login social</div>
+{/if}
+
+<div>
+	<p>Não possui uma conta? <a href="/sign-up">Crie uma agora</a></p>
+</div>
+
+<!--
+	Usando @apply com módulos Vue, Svelte ou CSS
+	https://tailwindcss.com/docs/upgrade-guide#using-apply-with-vue-svelte-or-css-modules
+	Usar: @reference "../../app.css";
+	Ou usar: var(--text-red-500);
+-->
+<style>
+	@reference "../../../app.css";
+
+	.error {
+		@apply text-sm text-red-500;
+	}
+</style>
 ```

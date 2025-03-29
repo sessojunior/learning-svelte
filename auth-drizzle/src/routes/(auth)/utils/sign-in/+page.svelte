@@ -32,7 +32,7 @@
 
 		try {
 			// Chama a API de login
-			const response = await fetch('/api/auth/signin', {
+			const response = await fetch('/api/auth/sign-in', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: 'email', email, password })
@@ -45,7 +45,7 @@
 			// Se foi feito o login
 			if (response.ok && data.success) {
 				// Redireciona para o dashboard
-				goto('/dashboard')
+				goto('/app/dashboard')
 			} else {
 				// Se houve erros recebidos pela API
 				if (data.errors) {
@@ -71,7 +71,7 @@
 					errors = []
 
 					// Chama a API de login
-					const response = await fetch('/api/auth/signin', {
+					const response = await fetch('/api/auth/sign-in', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ type: 'otp', email })
@@ -106,7 +106,7 @@
 					errors = []
 
 					// Chama a API de login
-					const response = await fetch('/api/auth/signin', {
+					const response = await fetch('/api/auth/sign-in', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({ type: 'otp', email, otp })
@@ -119,7 +119,7 @@
 					// Se o OTP corresponder ao fornecido
 					if (response.ok && data.success) {
 						// Redireciona para o dashboard
-						goto('/dashboard')
+						goto('/app/dashboard')
 					} else {
 						// Se houve erros recebidos pela API
 						if (data.errors) {
@@ -168,7 +168,7 @@
 	<!-- Login por e-mail e senha -->
 	<form onsubmit={handleSignInEmail}>
 		<div>
-			<p>Informe os dados abaixo para fazer o login. Enviaremos um código por e-mail que deverá ser informado na próxima etapa.</p>
+			<p>Informe os dados abaixo para fazer o login.</p>
 		</div>
 		<div>
 			<label>
@@ -204,7 +204,7 @@
 		<!-- Login por OTP: Etapa 1 (informar o e-mail) -->
 		<form onsubmit={handleSignInOtp}>
 			<div>
-				<p>Informe o e-mail abaixo para fazer o login.</p>
+				<p>Informe o e-mail abaixo para fazer o login. Enviaremos um código por e-mail que deverá ser informado na próxima etapa.</p>
 			</div>
 			<div>
 				<label>
@@ -252,7 +252,7 @@
 {/if}
 
 <div>
-	<p>Não possui uma conta? <a href="/signup">Crie uma agora</a></p>
+	<p>Não possui uma conta? <a href="/sign-up">Crie uma agora</a></p>
 </div>
 
 <!-- 
@@ -262,7 +262,7 @@
 	Ou usar: var(--text-red-500);
 -->
 <style>
-	@reference "../../app.css";
+	@reference "../../../app.css";
 
 	.error {
 		@apply text-sm text-red-500;

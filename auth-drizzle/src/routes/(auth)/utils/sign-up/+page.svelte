@@ -24,7 +24,7 @@
 
 		try {
 			// Chama a API de cadastro
-			const response = await fetch('/api/auth/signup', {
+			const response = await fetch('/api/auth/sign-up', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name, email, password })
@@ -36,7 +36,7 @@
 
 			// Se foi feito o cadastro
 			if (response.ok && data.success) {
-				goto('/dashboard') // Redireciona para o dashboard
+				goto('/app/dashboard') // Redireciona para o dashboard
 			} else {
 				// Se houve erros recebidos pela API
 				if (data.errors) {
@@ -123,7 +123,7 @@
 </form>
 
 <div>
-	<p>Já possui uma conta? <a href="/signin">Faça login</a></p>
+	<p>Já possui uma conta? <a href="/sign-in">Faça login</a></p>
 </div>
 
 <!-- 
@@ -133,7 +133,7 @@
 	Ou usar: var(--text-red-500);
 -->
 <style>
-	@reference "../../app.css";
+	@reference "../../../app.css";
 
 	.error {
 		@apply text-sm text-red-500;

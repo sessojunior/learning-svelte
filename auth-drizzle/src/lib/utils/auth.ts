@@ -1,3 +1,7 @@
+import { goto } from '$app/navigation'
+import { authClient } from '$lib/auth-client'
+
+// Códigos de erro de autenticação amigáveis
 export const errorCodes = {
 	USER_NOT_FOUND: 'Usuário não encontrado',
 	FAILED_TO_CREATE_USER: 'Falha ao criar usuário',
@@ -23,3 +27,18 @@ export const errorCodes = {
 	FAILED_TO_UNLINK_LAST_ACCOUNT: 'Falha ao desvincular a última conta',
 	ACCOUNT_NOT_FOUND: 'Conta não encontrada'
 }
+
+// Função de logout
+export async function handleSignOut() {
+	await authClient.signOut({
+		fetchOptions: {
+			onSuccess: () => {
+				// Redireciona para a página de login
+				goto('/sign-in')
+			}
+		}
+	})
+}
+
+// Dados da sessão do usuário
+export const session = authClient.useSession()
