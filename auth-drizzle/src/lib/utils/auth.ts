@@ -1,8 +1,9 @@
 import { goto } from '$app/navigation'
 import { authClient } from '$lib/auth-client'
 
-// Códigos de erro de autenticação amigáveis
+// Códigos de erro de autenticação amigáveis do Better Auth
 export const errorCodes = {
+	// Códigos de erro comuns
 	USER_NOT_FOUND: 'Usuário não encontrado',
 	FAILED_TO_CREATE_USER: 'Falha ao criar usuário',
 	FAILED_TO_CREATE_SESSION: 'Falha ao criar sessão',
@@ -25,7 +26,10 @@ export const errorCodes = {
 	CREDENTIAL_ACCOUNT_NOT_FOUND: 'Conta de credencial não encontrada',
 	SESSION_EXPIRED: 'Sessão expirada',
 	FAILED_TO_UNLINK_LAST_ACCOUNT: 'Falha ao desvincular a última conta',
-	ACCOUNT_NOT_FOUND: 'Conta não encontrada'
+	ACCOUNT_NOT_FOUND: 'Conta não encontrada',
+	// Códigos de erro do OTP
+	OTP_EXPIRED: 'Código expirado.',
+	INVALID_OTP: 'Código inválido.'
 }
 
 // Função de logout

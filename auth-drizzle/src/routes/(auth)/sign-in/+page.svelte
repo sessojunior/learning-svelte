@@ -88,8 +88,6 @@
 	const handleSignInOtp = async () => {
 		errors = []
 
-		console.log('stepOtp', stepOtp)
-
 		// Etapa 1: Se enviou apenas o email
 		if (stepOtp === 1) {
 			// 1 - Valida os dados recebidos
@@ -97,7 +95,6 @@
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
 
-				console.log('errors', errors)
 				return false
 			}
 
@@ -107,9 +104,6 @@
 
 				return false
 			}
-
-			console.log('validatedSchema', validatedSchema)
-			console.log('errors', errors)
 
 			loading = true
 
@@ -121,10 +115,7 @@
 
 			loading = false
 
-			console.log('data', data)
-			console.log('error', error)
-
-			// 3 - Se obteve os dados com sucesso da API
+			// 4 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Muda para a etapa 2
 				stepOtp = 2
@@ -135,8 +126,6 @@
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
 			}
-
-			console.log('errors', errors)
 		}
 
 		// Etapa 2: Se enviou o email e o OTP
@@ -167,7 +156,7 @@
 
 			loading = false
 
-			// 3 - Se obteve os dados com sucesso da API
+			// 4 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Redireciona para o dashboard
 				goto('/app/dashboard')
@@ -179,6 +168,24 @@
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
 			}
 		}
+	}
+
+	// Login social
+	const handleSignInSocial = async (provider: 'google' | 'facebook') => {
+		errors = []
+
+		loading = true
+
+		// Chama a API de login social
+		await authClient.signIn.social({
+			provider: provider,
+			callbackURL: '/app/dashboard', // Padrão: '/'. URL de redirecionamento após o usuário fazer login com o provedor social.
+			errorCallbackURL: '/sign-in', // URL de redirecionamento em caso de erro durante o processo de login com o provedor social.
+			newUserCallbackURL: '/app/dashboard', //  URL de redirecionamento em caso de sucesso ao criar uma nova conta com o provedor social.
+			disableRedirect: false // Padrão: false. Se true, o redirecionamento para a URL de sucesso ou erro será desabilitado.
+		})
+
+		loading = false
 	}
 </script>
 
@@ -245,6 +252,11 @@
 				{loading ? 'Entrando...' : 'Entrar'}
 			</button>
 		</div>
+
+		<!-- Esqueceu a senha? -->
+		<div>
+			<p><a href="/forget-password">Esqueceu a senha?</a></p>
+		</div>
 	</form>
 {/if}
 
@@ -302,6 +314,15 @@
 <!-- Login social -->
 {#if type === 'social'}
 	<div>Login social</div>
+	<div>
+		<p>Escolha qual forma de login social deseja fazer:</p>
+	</div>
+	<div>
+		<button onclick={() => handleSignInSocial('google')}>Login com Google</button>
+	</div>
+	<div>
+		<button onclick={() => handleSignInSocial('facebook')}>Login com Facebook</button>
+	</div>
 {/if}
 
 <div>
