@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { checkIfUserEmailExists } from '$lib/utils/db'
+	import { checkIfUserExists } from '$lib/utils/db'
 	import { z } from 'zod'
 
 	// Dados para recuperar senha
@@ -51,7 +51,7 @@
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 
 				return false
@@ -91,7 +91,7 @@
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 				stepOtp = 1
 

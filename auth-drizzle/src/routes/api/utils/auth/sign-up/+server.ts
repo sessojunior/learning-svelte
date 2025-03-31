@@ -1,6 +1,6 @@
 import { auth } from '$lib/server/auth'
 import { errorCodes } from '$lib/utils/auth'
-import { checkIfUserEmailExists } from '$lib/server/utils/db'
+import { checkIfUserExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
@@ -63,7 +63,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 	}
 
 	// Verifica se o e-mail já está cadastrado
-	if (await checkIfUserEmailExists(validatedSchema.email)) {
+	if (await checkIfUserExists(validatedSchema.email)) {
 		return json({ success: false, errors: [{ field: 'email', code: 'USER_ALREADY_EXISTS', message: 'Usuário já existe.' }] } as SignUpResponse, { status: 400 })
 	}
 

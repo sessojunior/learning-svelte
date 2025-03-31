@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { checkIfUserEmailExists } from '$lib/utils/db'
+	import { checkIfUserExists } from '$lib/utils/db'
 	import { z } from 'zod'
 	import { goto } from '$app/navigation'
 
@@ -71,6 +71,9 @@
 
 		loading = false
 
+		console.log('data', data)
+		console.log('error', error)
+
 		// 3 - Se obteve os dados com sucesso da API
 		if (data) {
 			// Redireciona para o dashboard
@@ -82,6 +85,8 @@
 			const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 			errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
 		}
+
+		console.log('errors', errors)
 	}
 
 	// Login com OTP
@@ -99,7 +104,7 @@
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 
 				return false
@@ -139,7 +144,7 @@
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 				stepOtp = 1
 
@@ -170,20 +175,26 @@
 		}
 	}
 
-	// Login social
-	const handleSignInSocial = async (provider: 'google' | 'facebook') => {
+	// Login social: Google, Microsoft, Apple ou Facebook
+	const handleSignInSocial = async ({ social, oauth2 }: { social?: 'google' | 'microsoft' | 'apple' | 'facebook'; oauth2?: 'instagram' }) => {
 		errors = []
 
-		loading = true
-
-		// Chama a API de login social
-		await authClient.signIn.social({
-			provider: provider,
+		const options = {
 			callbackURL: '/app/dashboard', // Padrão: '/'. URL de redirecionamento após o usuário fazer login com o provedor social.
 			errorCallbackURL: '/sign-in', // URL de redirecionamento em caso de erro durante o processo de login com o provedor social.
 			newUserCallbackURL: '/app/dashboard', //  URL de redirecionamento em caso de sucesso ao criar uma nova conta com o provedor social.
 			disableRedirect: false // Padrão: false. Se true, o redirecionamento para a URL de sucesso ou erro será desabilitado.
-		})
+		}
+
+		loading = true
+
+		if (social !== undefined) {
+			// Chama a API de login social
+			await authClient.signIn.social({ provider: social, ...options })
+		} else if (oauth2 !== undefined) {
+			// Chama a API de login oauth2
+			await authClient.signIn.oauth2({ providerId: oauth2, ...options })
+		}
 
 		loading = false
 	}
@@ -318,10 +329,24 @@
 		<p>Escolha qual forma de login social deseja fazer:</p>
 	</div>
 	<div>
-		<button onclick={() => handleSignInSocial('google')}>Login com Google</button>
+		<button onclick={() => handleSignInSocial({ social: 'google' })}>Login com Google</button>
 	</div>
 	<div>
-		<button onclick={() => handleSignInSocial('facebook')}>Login com Facebook</button>
+		<p>Login com Microsoft - não será implementada devido a cobranças com a utilização do <a href="https://www.microsoft.com/pt-br/security/business/microsoft-entra-pricing">Microsoft Azure Entra ID</a>.</p>
+	</div>
+	<div>
+		<p>Login com Apple - não será implementada no momento devido a necessidade de um dispositivo Apple para a criação da conta.</p>
+	</div>
+	<div>
+		<button onclick={() => handleSignInSocial({ social: 'facebook' })}>Login com Facebook</button>
+	</div>
+	<!---
+	<div>
+		<button onclick={() => handleSignInSocial({ oauth2: 'instagram' })}>Login com Instagram</button>
+	</div>
+	-->
+	<div>
+		<p>Os provedores sociais acima são suficientes, pois são os maiores detentores de sistemas operacionais (Google Android, Apple iOS, Microsoft Windows) existentes no mundo.</p>
 	</div>
 {/if}
 

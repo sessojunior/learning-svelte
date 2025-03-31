@@ -1,17 +1,19 @@
 import { betterAuth } from 'better-auth'
-import { emailOTP } from 'better-auth/plugins'
+import { genericOAuth, emailOTP } from 'better-auth/plugins'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { db } from '$lib/server/db' // Não utilizar '$lib/server/db' se for usar o comando 'npx @better-auth/cli@latest generate'
+import { env } from '$env/dynamic/private'
+
+import { db } from './db' // Não utilizar '$lib/server/db' se for usar o comando 'npx @better-auth/cli@latest generate', utilizar './db'.
 // import * as schema from '../lib/server/db/schema' // Não utilizar '$lib/server/db/schema' se for usar o comando 'npx @better-auth/cli@latest generate'
 
-import { sendEmail } from '$lib/utils/email'
+import { sendEmail } from '../utils/email' // Não utilizar '$lib/server/utils/email' se for usar o comando 'npx @better-auth/cli@latest generate'. Utilizar '../utils/email'
 
 // Cria uma instância do Better Auth e exporta como `auth`
 export const auth = betterAuth({
 	// Modifica o caminho base para a rota de API de autenticação manipulada em 'hooks.server.ts'.
 	// Isso é importante caso venha a ser usado no futuro o manipulador de rotas `src/hooks.server.ts` junto com as funções do lado do cliente `auth-client.ts`
 	// Se os arquivos `hooks.server.ts` e `auth-client.ts` não estiverem no projeto, podemos ignorar adicionar o 'basePath'
-	// basePath: '/api/auth', // Padrão: '/api/auth'. Para evitar interferências com as rotas de API próprias, utilize uma rota diferente de '/api/auth'
+	basePath: '/api/auth', // Padrão: '/api/auth'. Para evitar interferências com as rotas de API próprias, utilize uma rota diferente de '/api/auth'
 	// Configura o banco de dados a ser usado com o adaptador do Drizzle
 	database: drizzleAdapter(db, {
 		provider: 'sqlite', // Pode ser: 'mysql', 'pg', 'sqlite'
@@ -45,12 +47,20 @@ export const auth = betterAuth({
 	// Autenticação por provedor social
 	socialProviders: {
 		google: {
-			clientId: process.env.GOOGLE_CLIENT_ID || '',
-			clientSecret: process.env.GOOGLE_CLIENT_SECRET || ''
+			clientId: env.GOOGLE_CLIENT_ID as string,
+			clientSecret: env.GOOGLE_CLIENT_SECRET as string
+		},
+		microsoft: {
+			clientId: env.MICROSOFT_CLIENT_ID as string,
+			clientSecret: env.MICROSOFT_CLIENT_SECRET as string
+		},
+		apple: {
+			clientId: env.APPLE_CLIENT_ID as string,
+			clientSecret: env.APPLE_CLIENT_SECRET as string
 		},
 		facebook: {
-			clientId: process.env.FACEBOOK_CLIENT_ID || '',
-			clientSecret: process.env.FACEBOOK_CLIENT_SECRET || ''
+			clientId: env.FACEBOOK_CLIENT_ID as string,
+			clientSecret: env.FACEBOOK_CLIENT_SECRET as string
 		}
 	},
 	session: {
@@ -69,6 +79,20 @@ export const auth = betterAuth({
 	},
 	// Plugins
 	plugins: [
+		// Generic OAuth
+		genericOAuth({
+			config: [
+				{
+					providerId: 'instagram', // Instagram
+					clientId: env.INSTAGRAM_CLIENT_ID as string,
+					clientSecret: env.INSTAGRAM_CLIENT_SECRET as string,
+					authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+					tokenUrl: 'https://api.instagram.com/oauth/access_token',
+					scopes: ['user_profile', 'user_media']
+				}
+			]
+		}),
+		// Email OTP
 		emailOTP({
 			// Opções
 			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Para evitar isso, você deve passar 'disableSignUp' como true

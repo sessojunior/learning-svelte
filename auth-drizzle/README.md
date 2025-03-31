@@ -267,7 +267,7 @@ Em seguida, criaremos o arquivo do banco de dados fazendo um push com o comando:
 ```typescript
 import { auth } from '$lib/server/auth'
 import { errorCodes } from '$lib/utils/auth'
-import { checkIfUserEmailExists } from '$lib/server/utils/db'
+import { checkIfUserExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
@@ -330,7 +330,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 	}
 
 	// Verifica se o e-mail já está cadastrado
-	if (await checkIfUserEmailExists(validatedSchema.email)) {
+	if (await checkIfUserExists(validatedSchema.email)) {
 		return json({ success: false, errors: [{ field: 'email', code: 'USER_ALREADY_EXISTS', message: 'Usuário já existe.' }] } as SignUpResponse, { status: 400 })
 	}
 
@@ -579,7 +579,7 @@ export const load: PageServerLoad = async ({ request }) => {
 ```typescript
 import { auth } from '$lib/server/auth'
 import { errorCodes } from '$lib/utils/auth'
-import { checkIfUserEmailExists } from '$lib/server/utils/db'
+import { checkIfUserExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
@@ -665,7 +665,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		// Se o e-mail e a senha forem válidos
 		if (validatedEmailSchema.email && validatedEmailSchema.password) {
 			// Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedEmailSchema.email || ''))) {
+			if (!(await checkIfUserExists(validatedEmailSchema.email || ''))) {
 				return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
 			}
 
@@ -713,7 +713,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		}
 
 		// Verifica se o e-mail não existe
-		if (!(await checkIfUserEmailExists(validatedOtpSchema.email || ''))) {
+		if (!(await checkIfUserExists(validatedOtpSchema.email || ''))) {
 			return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
 		}
 

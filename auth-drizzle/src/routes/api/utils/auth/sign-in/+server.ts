@@ -1,6 +1,6 @@
 import { auth } from '$lib/server/auth'
 import { errorCodes } from '$lib/utils/auth'
-import { checkIfUserEmailExists } from '$lib/server/utils/db'
+import { checkIfUserExists } from '$lib/server/utils/db'
 
 import { json, type RequestEvent } from '@sveltejs/kit'
 import { z } from 'zod'
@@ -86,7 +86,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		// Se o e-mail e a senha forem válidos
 		if (validatedEmailSchema.email && validatedEmailSchema.password) {
 			// Verifica se o e-mail não existe
-			if (!(await checkIfUserEmailExists(validatedEmailSchema.email || ''))) {
+			if (!(await checkIfUserExists(validatedEmailSchema.email || ''))) {
 				return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
 			}
 
@@ -134,7 +134,7 @@ export async function POST({ request }: RequestEvent): Promise<Response> {
 		}
 
 		// Verifica se o e-mail não existe
-		if (!(await checkIfUserEmailExists(validatedOtpSchema.email || ''))) {
+		if (!(await checkIfUserExists(validatedOtpSchema.email || ''))) {
 			return json({ success: false, errors: [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }] } as SignInResponse, { status: 400 })
 		}
 
