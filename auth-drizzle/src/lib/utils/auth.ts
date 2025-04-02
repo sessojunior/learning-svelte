@@ -29,7 +29,11 @@ export const errorCodes = {
 	ACCOUNT_NOT_FOUND: 'Conta não encontrada',
 	// Códigos de erro do OTP
 	OTP_EXPIRED: 'Código expirado.',
-	INVALID_OTP: 'Código inválido.'
+	INVALID_OTP: 'Código inválido.',
+	// Códigos de erro de verificação e alteração de dados
+	CHANGE_EMAIL_IS_DISABLED: 'Alteração de e-mail desabilitada.',
+	VERIFICATION_EMAIL_ISNT_ENABLED: 'Verificação de e-mail não está habilitada.',
+	EMAIL_IS_THE_SAME: 'O e-mail é o mesmo.'
 }
 
 // Função de logout
@@ -44,5 +48,5 @@ export async function handleSignOut() {
 	})
 }
 
-// Dados da sessão do usuário
-export const session = authClient.useSession()
+// Obter dados da sessão do usuário
+export const { data: session } = await authClient.getSession()

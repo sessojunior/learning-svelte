@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { checkIfUserExists } from '$lib/utils/db'
+	import { checkIfUserEmailExists } from '$lib/utils/db'
 	import { z } from 'zod'
 	import { goto } from '$app/navigation'
 
@@ -14,7 +14,7 @@
 
 	// Dados para login com OTP
 	let stepOtp = $state(1)
-	let otp = $state(null)
+	let otp = $state('')
 
 	let loading = $state(false)
 	let errors: { field?: string; code: string; message: string }[] = $state([])
@@ -56,7 +56,6 @@
 		const validatedSchema = emailSignInSchema.safeParse({ email, password })
 		if (!validatedSchema.success) {
 			errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
 			return false
 		}
 
@@ -66,7 +65,8 @@
 		const { data, error } = await authClient.signIn.email({
 			email: validatedSchema.data.email,
 			password: validatedSchema.data.password,
-			rememberMe: true // Padrão: true. Se falso, o usuário será desconectado quando o navegador for fechado. (opcional)
+			rememberMe: true, // Padrão: true. Se falso, o usuário será desconectado quando o navegador for fechado. (opcional)
+			callbackURL: '/app/dashboard'
 		})
 
 		loading = false
@@ -74,19 +74,12 @@
 		console.log('data', data)
 		console.log('error', error)
 
-		// 3 - Se obteve os dados com sucesso da API
-		if (data) {
-			// Redireciona para o dashboard
-			goto('/app/dashboard')
-
-			return false
-		} else {
+		// 3 - Se ocorreu erros na API
+		if (error) {
 			// Traduz os erros de API para mensagens amigáveis
 			const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
-			errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
+			errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
 		}
-
-		console.log('errors', errors)
 	}
 
 	// Login com OTP
@@ -99,14 +92,12 @@
 			const validatedSchema = otpStep1SignInSchema.safeParse({ email })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
 				return false
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
-
 				return false
 			}
 
@@ -124,30 +115,27 @@
 			if (data) {
 				// Muda para a etapa 2
 				stepOtp = 2
-
 				return false
 			} else {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
-				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
+				errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
 			}
 		}
 
-		// Etapa 2: Se enviou o email e o OTP
+		// Etapa 2: Se enviou o email e o otp
 		if (stepOtp === 2) {
 			// 1 - Valida os dados recebidos
 			const validatedSchema = otpStep2SignInSchema.safeParse({ email, otp })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
 				return false
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 				stepOtp = 1
-
 				return false
 			}
 
@@ -165,12 +153,11 @@
 			if (data) {
 				// Redireciona para o dashboard
 				goto('/app/dashboard')
-
 				return false
 			} else {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
-				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
+				errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
 			}
 		}
 	}
@@ -210,6 +197,9 @@
 			{#if !field}
 				<!-- Erro geral, como 'Erro ao acessar o servidor.' -->
 				<p>{message}</p>
+			{:else}
+				<!-- Erro de campo, como 'O campo nome é obrigatório.' -->
+				<p>{fieldName[field]}: {message}</p>
 			{/if}
 		{/each}
 	</div>
@@ -260,7 +250,7 @@
 
 		<div>
 			<button type="submit" disabled={loading}>
-				{loading ? 'Entrando...' : 'Entrar'}
+				{loading ? 'Verificando dados...' : 'Entrar'}
 			</button>
 		</div>
 
@@ -277,6 +267,7 @@
 		<!-- Etapa 1: informar o e-mail para enviar o OTP por e-mail -->
 		{#if stepOtp === 1}
 			<div>
+				<h2>Etapa 1</h2>
 				<p>Informe o e-mail abaixo para fazer o login. Enviaremos um código por e-mail que deverá ser informado na próxima etapa.</p>
 			</div>
 			<div>
@@ -300,7 +291,8 @@
 		<!-- Etapa 2: informar o OTP para fazer o login -->
 		{#if stepOtp === 2}
 			<div>
-				<p>Informe abaixo o código que recebeu por e-mail para fazer o login.</p>
+				<h2>Etapa 2</h2>
+				<p>Foi enviado um código para o e-mail informado. Informe abaixo o código que recebeu por e-mail para fazer o login.</p>
 			</div>
 			<div>
 				<label>
@@ -315,7 +307,7 @@
 			</div>
 			<div>
 				<button type="submit" disabled={loading}>
-					{loading ? 'Entrando...' : 'Entrar'}
+					{loading ? 'Verificando dados...' : 'Entrar'}
 				</button>
 			</div>
 		{/if}
@@ -331,23 +323,23 @@
 	<div>
 		<button onclick={() => handleSignInSocial({ social: 'google' })}>Login com Google</button>
 	</div>
+	<!---
 	<div>
-		<p>Login com Microsoft - não será implementada devido a cobranças com a utilização do <a href="https://www.microsoft.com/pt-br/security/business/microsoft-entra-pricing">Microsoft Azure Entra ID</a>.</p>
+		<button onclick={() => handleSignInSocial({ social: 'facebook' })}>Login com Microsoft</button>
 	</div>
 	<div>
-		<p>Login com Apple - não será implementada no momento devido a necessidade de um dispositivo Apple para a criação da conta.</p>
+		<button onclick={() => handleSignInSocial({ social: 'facebook' })}>Login com Apple</button>
 	</div>
 	<div>
 		<button onclick={() => handleSignInSocial({ social: 'facebook' })}>Login com Facebook</button>
 	</div>
-	<!---
 	<div>
 		<button onclick={() => handleSignInSocial({ oauth2: 'instagram' })}>Login com Instagram</button>
 	</div>
-	-->
 	<div>
 		<p>Os provedores sociais acima são suficientes, pois são os maiores detentores de sistemas operacionais (Google Android, Apple iOS, Microsoft Windows) existentes no mundo.</p>
 	</div>
+	-->
 {/if}
 
 <div>
@@ -355,7 +347,8 @@
 </div>
 
 <!-- 
-  Usando @apply com módulos Vue, Svelte ou CSS: https://tailwindcss.com/docs/upgrade-guide#using-apply-with-vue-svelte-or-css-modules
+  Usando @apply com módulos Vue, Svelte ou CSS: 
+	https://tailwindcss.com/docs/upgrade-guide#using-apply-with-vue-svelte-or-css-modules
 	Usar: @reference "../../../app.css"; Ou usar: var(--text-red-500);
 -->
 <style>

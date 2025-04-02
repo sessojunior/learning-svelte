@@ -20,10 +20,7 @@ export default ts.config(
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node }
 		},
-		rules: {
-			'no-undef': 'off',
-			'@typescript-eslint/no-explicit-any': 'off' // Desabilita a regra que impede o uso de 'any'
-		}
+		rules: { 'no-undef': 'off' }
 	},
 	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],

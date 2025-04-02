@@ -45,10 +45,10 @@ export const sendEmail = async ({
 
 	try {
 		await transporter.sendMail(mailOptions)
-		console.log('E-mail enviado com sucesso!')
+		console.log(`E-mail enviado com sucesso para: ${to}!`)
 		return { success: true }
 	} catch (err) {
-		console.error('Erro ao enviar o e-mail:', err)
+		console.error(`Erro ao enviar o e-mail para: ${to}!\n`, err)
 		return { success: false, error: err instanceof Error ? { code: err.name, message: err.message } : { code: 'UNKNOWN_ERROR', message: 'Erro desconhecido' } }
 	}
 }

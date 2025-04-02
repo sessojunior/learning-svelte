@@ -4,9 +4,9 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { env } from '$env/dynamic/private'
 
 import { db } from './db' // Não utilizar '$lib/server/db' se for usar o comando 'npx @better-auth/cli@latest generate', utilizar './db'.
-// import * as schema from '../lib/server/db/schema' // Não utilizar '$lib/server/db/schema' se for usar o comando 'npx @better-auth/cli@latest generate'
+// import * as schema from '../lib/server/db-schema' // Não utilizar '$lib/server/db-schema' se for usar o comando 'npx @better-auth/cli@latest generate', utilizar '../lib/server/db-schema'
 
-import { sendEmail } from '../utils/email' // Não utilizar '$lib/server/utils/email' se for usar o comando 'npx @better-auth/cli@latest generate'. Utilizar '../utils/email'
+import { sendEmail } from '../utils/email' // Não utilizar '$lib/server/utils/email' se for usar o comando 'npx @better-auth/cli@latest generate', utilizar '../utils/email'
 
 // Cria uma instância do Better Auth e exporta como `auth`
 export const auth = betterAuth({
@@ -33,36 +33,57 @@ export const auth = betterAuth({
 	},
 	// Verificação de e-mail
 	// A rota de verificação de e-mail depende da existência do arquivo 'src/hooks.server.ts'
-	// E também depende da configuração em basePath, neste arquivo '$lib/server/auth.ts'
-	emailVerification: {
-		sendVerificationEmail: async ({ user, url }) => {
-			// Enviar e-mail de verificação de e-mail
-			sendEmail({
-				to: user.email,
-				subject: 'Verificação de e-mail',
-				text: `Clique no link para verificar seu e-mail e confirmar sua conta: \n\n${url}`
-			})
-		}
-	},
+	// e também depende da configuração em basePath, neste arquivo '$lib/server/auth.ts'.
+	// Deixar 'emailVerification' e 'sendVerificationEmail' comentado ou retirar do código
+	// caso utilize o código OTP para fazer a verificação de e-mail.
+	// emailVerification: {
+	// 	sendVerificationEmail: async ({ user, url }) => {
+	// 		// Enviar e-mail de verificação de e-mail
+	// 		sendEmail({
+	// 			to: user.email,
+	// 			subject: 'Verificação de e-mail',
+	// 			text: `Clique no link para verificar seu e-mail e confirmar sua conta: \n\n${url}`
+	// 		})
+	// 	}
+	// },
 	// Autenticação por provedor social
 	socialProviders: {
 		google: {
 			clientId: env.GOOGLE_CLIENT_ID as string,
 			clientSecret: env.GOOGLE_CLIENT_SECRET as string
-		},
-		microsoft: {
-			clientId: env.MICROSOFT_CLIENT_ID as string,
-			clientSecret: env.MICROSOFT_CLIENT_SECRET as string
-		},
-		apple: {
-			clientId: env.APPLE_CLIENT_ID as string,
-			clientSecret: env.APPLE_CLIENT_SECRET as string
-		},
-		facebook: {
-			clientId: env.FACEBOOK_CLIENT_ID as string,
-			clientSecret: env.FACEBOOK_CLIENT_SECRET as string
+		}
+		// microsoft: {
+		// 	clientId: env.MICROSOFT_CLIENT_ID as string,
+		// 	clientSecret: env.MICROSOFT_CLIENT_SECRET as string
+		// },
+		// apple: {
+		// 	clientId: env.APPLE_CLIENT_ID as string,
+		// 	clientSecret: env.APPLE_CLIENT_SECRET as string
+		// },
+		// facebook: {
+		// 	clientId: env.FACEBOOK_CLIENT_ID as string,
+		// 	clientSecret: env.FACEBOOK_CLIENT_SECRET as string
+		// }
+	},
+	// Dados do usuário
+	user: {
+		changeEmail: {
+			enabled: true // Padrão: false. Deixar como true para permitir que os usuários alterem seus e-mails
+			// sendChangeEmailVerification: async ({ user, newEmail, url, token }) => {
+			// 	// Para usuários com e-mail verificado, envia um e-mail de verificação com uma URL e um token
+			// 	// Mas se o e-mail atual não estiver verificado, a alteração do e-mail ocorre sem enviar e-mail de verificação
+			// 	await sendEmail({
+			// 		to: newEmail,
+			// 		subject: 'Aprove a alteração de e-mail',
+			// 		text: `Clique no link a seguir para confirmar a alteração de seu e-mail: \n\n${url}`
+			// 	})
+			// 	console.log('user.email', user.email)
+			// 	console.log('newEmail', newEmail)
+			// 	console.log('token', token)
+			// },
 		}
 	},
+	// Dados da sessão
 	session: {
 		expiresIn: 604800, // Tempo de expiração do token de sessão em segundos (padrão: 604800- 7 dias)
 		updateAge: 86400, // Com que frequência a sessão deve ser atualizada em segundos (padrão: 86400- 1 dia)
@@ -95,11 +116,14 @@ export const auth = betterAuth({
 		// Email OTP
 		emailOTP({
 			// Opções
-			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Para evitar isso, você deve passar 'disableSignUp' como true
-			// Envia o OTP
+			otpLength: 6, // Padrão: 6. Quantidade de números que o OTP terá
+			expiresIn: 300, // Padrão: 300 (5 minutos). Tempo de expiração do OTP em segundos
+			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Para evitar isso, é preciso deixar 'disableSignUp' como true.
+			sendVerificationOnSignUp: true, // Padrão: false. Envia OTP para o e-mail do usuário quando ele cria uma conta.
+			// Envia o OTP para o e-mail do usuário
 			async sendVerificationOTP({ email, otp, type }) {
 				// Enviar e-mail com o código OTP
-				sendEmail({
+				await sendEmail({
 					to: email,
 					subject: 'Código de verificação',
 					text: `Utilize o seguinte código de verificação ${type === 'sign-in' ? 'para fazer login' : type === 'email-verification' ? 'para verificar seu e-mail' : type === 'forget-password' ? 'para recuperar sua senha' : 'a seguir'}: ${otp}`
