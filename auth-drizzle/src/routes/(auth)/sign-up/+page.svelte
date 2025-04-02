@@ -16,7 +16,7 @@
 	let loading = $state(false)
 	let errors: { field?: string; code: string; message: string }[] = $state([])
 
-	// Criar conta com e-mail e senha
+	// Criar conta
 	const handleSignUp = async () => {
 		loading = true
 		errors = []
@@ -67,7 +67,7 @@
 				// 4.2 - Se o e-mail do usuário já foi verificado
 				// Exibe mensagem de que a conta já existe, e que é necessário fazer o login.
 				if (userEmailVerified) {
-					errors = [{ code: 'USER_EMAIL_ALREADY_VERIFIED', message: 'Usuário já existente. Faça login para entrar.' }]
+					errors = [{ code: 'USER_ALREADY_EXISTS', message: 'Usuário já existente. Faça login para entrar.' }]
 					loading = false
 					return false
 				}
@@ -82,7 +82,7 @@
 					})
 
 					// Exibe mensagem de que será enviado um código para o e-mail para verificar a conta.
-					errors = [{ code: 'USER_EMAIL_NOT_VERIFIED', message: 'Usuário já existente. Verifique a sua conta confirmando o código que foi enviado para o seu e-mail.' }]
+					errors = [{ code: 'EMAIL_NOT_VERIFIED', message: 'E-mail não verificado. Verifique a sua conta confirmando o código que foi enviado para o seu e-mail.' }]
 
 					// Pula para a etapa 2
 					stepOtp = 2
@@ -123,9 +123,6 @@
 			if (data) {
 				// 3.1 - Altera o nome do usuário com o último nome de usuário digitado pelo usuário
 				await authClient.updateUser({ name: name.trim() })
-
-				// 3.2 - Pula para a etapa 3
-				stepOtp = 3
 
 				// 3.3 - Redireciona para a página de dashboard
 				window.location.href = '/app/dashboard'
@@ -243,15 +240,6 @@
 			<button type="submit" disabled={loading}>
 				{loading ? 'Enviando dados...' : 'Enviar código'}
 			</button>
-		</div>
-	{/if}
-
-	<!-- Etapa 3: conta criada com sucesso -->
-	{#if stepOtp === 3}
-		<div>
-			<h2>Etapa 3</h2>
-			<p>A conta foi criada com sucesso. <a href="/sign-in">Faça login</a> para entrar.</p>
-			<p>Se você esqueceu sua senha, use a <a href="/forget-password">recuperação de senha</a>.</p>
 		</div>
 	{/if}
 </form>

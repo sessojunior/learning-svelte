@@ -15,27 +15,6 @@
 	let loading = $state(false)
 	let errors: { field?: string; code: string; message: string }[] = $state([])
 
-	// Schema de validação com Zod: tipo otp (etapa 1)
-	const otpStep1ForgotPasswordSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
-	})
-
-	// Schema de validação com Zod: tipo otp (etapa 2)
-	const otpStep3ForgotPasswordSchema = z.object({
-		email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
-		otp: z
-			.string()
-			.trim()
-			.regex(/^\d{6}$/, { message: 'O código é inválido.' }), // Garante que o OTP seja composto por exatamente 6 números
-		password: z
-			.string()
-			.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
-			.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
-			.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
-			.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
-			.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
-	})
-
 	// Esqueceu a senha
 	const handleForgotPassword = async () => {
 		loading = true
@@ -43,8 +22,13 @@
 
 		// Etapa 1: Se enviou apenas o email
 		if (stepOtp === 1) {
+			// Schema de validação com Zod
+			const schema = z.object({
+				email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
+			})
+
 			// 1 - Valida os dados recebidos
-			const validatedSchema = otpStep1ForgotPasswordSchema.safeParse({ email })
+			const validatedSchema = schema.safeParse({ email })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
 				loading = false
@@ -70,7 +54,10 @@
 				stepOtp = 2
 				loading = false
 				return false
-			} else {
+			}
+
+			// Se obteve um erro
+			if (error) {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
@@ -79,8 +66,24 @@
 
 		// Etapa 2: envia o email, o OTP e a nova senha
 		if (stepOtp === 2) {
+			// Schema de validação com Zod
+			const schema = z.object({
+				email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+				otp: z
+					.string()
+					.trim()
+					.regex(/^\d{6}$/, { message: 'O código é inválido.' }), // Garante que o OTP seja composto por exatamente 6 números
+				password: z
+					.string()
+					.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
+					.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
+					.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
+					.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
+					.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
+			})
+
 			// 1 - Valida os dados recebidos
-			const validatedSchema = otpStep3ForgotPasswordSchema.safeParse({ email, otp, password })
+			const validatedSchema = schema.safeParse({ email, otp, password })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
 				loading = false
@@ -109,7 +112,10 @@
 				stepOtp = 3
 				loading = false
 				return false
-			} else {
+			}
+
+			// Se obteve um erro
+			if (error) {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
