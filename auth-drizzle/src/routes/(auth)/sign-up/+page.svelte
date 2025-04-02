@@ -2,7 +2,6 @@
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
 	import { checkIfUserEmailVerified } from '$lib/utils/db'
-	import { redirect } from '@sveltejs/kit'
 	import { z } from 'zod'
 
 	// Dados para cadastro
@@ -127,11 +126,11 @@
 
 				// 3.2 - Pula para a etapa 3
 				stepOtp = 3
-				loading = false
 
 				// 3.3 - Redireciona para a página de dashboard
-				redirect(302, '/app/dashboard')
+				window.location.href = '/app/dashboard'
 
+				loading = false
 				return false
 			}
 
