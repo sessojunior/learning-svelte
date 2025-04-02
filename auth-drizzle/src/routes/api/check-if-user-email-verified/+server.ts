@@ -7,7 +7,8 @@ import { eq } from 'drizzle-orm'
 // Recebe o e-mail como corpo da requisição
 // Retorna um JSON com a resposta da API: { verified: true | false }
 export const POST = async ({ request }) => {
-	const { email } = await request.json()
+	const data = await request.json()
+	const email = data.email.trim().toLowerCase()
 
 	const user = await db.select({ emailVerified: users.emailVerified }).from(users).where(eq(users.email, email)).get()
 	return json({ verified: !!user?.emailVerified })

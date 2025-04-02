@@ -21,7 +21,8 @@ export const auth = betterAuth({
 		// 	...schema,
 		// 	user: schema.users // Se o esquema mapeia a tabela 'user' como 'users'
 		// },
-		usePlural: true // Caso deseje que as tabelas sejam criadas com nomes no plural
+		// Caso deseje que as tabelas sejam criadas com nomes no plural, defina 'usePlural' como 'true'
+		usePlural: true
 	}),
 	// Autenticação por e-mail e senha
 	// Por padrão, os usuários são automaticamente conectados após se inscreverem com sucesso.
@@ -32,20 +33,24 @@ export const auth = betterAuth({
 		requireEmailVerification: true // Padrão: false. Habilitando requer que o usuário verifique seu e-mail antes de fazer login
 	},
 	// Verificação de e-mail
-	// A rota de verificação de e-mail depende da existência do arquivo 'src/hooks.server.ts'
-	// e também depende da configuração em basePath, neste arquivo '$lib/server/auth.ts'.
-	// Deixar 'emailVerification' e 'sendVerificationEmail' comentado ou retirar do código
-	// caso utilize o código OTP para fazer a verificação de e-mail.
-	// emailVerification: {
-	// 	sendVerificationEmail: async ({ user, url }) => {
-	// 		// Enviar e-mail de verificação de e-mail
-	// 		sendEmail({
-	// 			to: user.email,
-	// 			subject: 'Verificação de e-mail',
-	// 			text: `Clique no link para verificar seu e-mail e confirmar sua conta: \n\n${url}`
-	// 		})
-	// 	}
-	// },
+	// A rota de verificação de e-mail depende da existência do arquivo 'src/hooks.server.ts' e também depende
+	// da configuração em basePath, neste arquivo '$lib/server/auth.ts'.
+	// Deixar 'emailVerification' e 'sendVerificationEmail' comentado ou retirar do código caso utilize o código OTP
+	// para fazer a verificação de e-mail.
+	emailVerification: {
+		// Para efetuar login automaticamente após ele verificar seu e-mail com sucesso, defina 'autoSignInAfterVerification' como 'true'
+		autoSignInAfterVerification: true
+		// Verificar e-mail utilizando um link de verificação, que somente irá funcionar na aba do navegador que está fazendo a solicitação
+		// Se o link for aberto em outra aba, não irá funcionar, pois não corresponderá a sessão
+		// sendVerificationEmail: async ({ user, url }) => {
+		// 	// Enviar e-mail de verificação de e-mail
+		// 	sendEmail({
+		// 		to: user.email,
+		// 		subject: 'Verificação de e-mail',
+		// 		text: `Clique no link para verificar seu e-mail e confirmar sua conta: \n\n${url}`
+		// 	})
+		// }
+	},
 	// Autenticação por provedor social
 	socialProviders: {
 		google: {
@@ -118,8 +123,8 @@ export const auth = betterAuth({
 			// Opções
 			otpLength: 6, // Padrão: 6. Quantidade de números que o OTP terá
 			expiresIn: 300, // Padrão: 300 (5 minutos). Tempo de expiração do OTP em segundos
-			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Para evitar isso, é preciso deixar 'disableSignUp' como true.
-			sendVerificationOnSignUp: true, // Padrão: false. Envia OTP para o e-mail do usuário quando ele cria uma conta.
+			disableSignUp: true, // Padrão: false. Se o usuário não estiver registrado, ele será registrado automaticamente. Deixar como true.
+			sendVerificationOnSignUp: true, // Padrão: false. Envia OTP para o e-mail do usuário quando ele cria uma conta. Deixar como true.
 			// Envia o OTP para o e-mail do usuário
 			async sendVerificationOTP({ email, otp, type }) {
 				// Enviar e-mail com o código OTP

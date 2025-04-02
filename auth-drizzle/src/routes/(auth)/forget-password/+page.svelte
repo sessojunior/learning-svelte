@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { checkIfUserExists } from '$lib/utils/db'
+	import { checkIfUserEmailExists } from '$lib/utils/db'
 	import { z } from 'zod'
 
 	// Dados para recuperar senha
@@ -22,7 +22,7 @@
 
 	// Schema de validação com Zod: tipo otp (etapa 2)
 	const otpStep3ForgotPasswordSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+		email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
 		otp: z
 			.string()
 			.trim()
@@ -38,6 +38,7 @@
 
 	// Esqueceu a senha
 	const handleForgotPassword = async () => {
+		loading = true
 		errors = []
 
 		// Etapa 1: Se enviou apenas o email
@@ -46,18 +47,16 @@
 			const validatedSchema = otpStep1ForgotPasswordSchema.safeParse({ email })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
+				loading = false
 				return false
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
-
+				loading = false
 				return false
 			}
-
-			loading = true
 
 			// 3 - Chama a API para enviar o OTP para o e-mail do usuário
 			const { data, error } = await authClient.emailOtp.sendVerificationOtp({
@@ -65,13 +64,11 @@
 				type: 'forget-password' // Pode ser 'sign-in', 'forget-password' ou 'email-verification'
 			})
 
-			loading = false
-
 			// 4 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Muda para a etapa 2
 				stepOtp = 2
-
+				loading = false
 				return false
 			} else {
 				// Traduz os erros de API para mensagens amigáveis
@@ -86,19 +83,17 @@
 			const validatedSchema = otpStep3ForgotPasswordSchema.safeParse({ email, otp, password })
 			if (!validatedSchema.success) {
 				errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
+				loading = false
 				return false
 			}
 
 			// 2 - Verifica se o e-mail não existe
-			if (!(await checkIfUserExists(validatedSchema.data.email))) {
+			if (!(await checkIfUserEmailExists(validatedSchema.data.email))) {
 				errors = [{ field: 'email', code: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' }]
 				stepOtp = 1
-
+				loading = false
 				return false
 			}
-
-			loading = true
 
 			// 3 - Chama a API de login com OTP
 			const { data, error } = await authClient.emailOtp.resetPassword({
@@ -107,14 +102,12 @@
 				password: validatedSchema.data.password
 			})
 
-			loading = false
-
 			// 4 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Senha redefinida com sucesso
 				// Muda para a etapa 3
 				stepOtp = 3
-
+				loading = false
 				return false
 			} else {
 				// Traduz os erros de API para mensagens amigáveis
@@ -122,6 +115,8 @@
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? 'Erro ao acessar o servidor.' }]
 			}
 		}
+
+		loading = false
 	}
 </script>
 
@@ -130,6 +125,7 @@
 <!-- Exibição de erros globais -->
 {#if errors.length > 0}
 	<div>
+		<hr />
 		<p>Ocorreram erros ao criar a conta.</p>
 		{#each errors as { field, message }}
 			{#if !field}
@@ -137,6 +133,7 @@
 				<p>{message}</p>
 			{/if}
 		{/each}
+		<hr />
 	</div>
 {/if}
 

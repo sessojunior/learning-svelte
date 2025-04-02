@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { checkIfUserExists } from '$lib/utils/db'
 	import { handleSignOut, session } from '$lib/utils/auth'
 	import { z } from 'zod'
 

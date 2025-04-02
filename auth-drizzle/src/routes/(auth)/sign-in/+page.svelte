@@ -28,7 +28,7 @@
 
 	// Schema de validação com Zod: tipo email
 	const emailSignInSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+		email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
 		password: z
 			.string({ required_error: 'A senha é obrigatória.' }) // Garante que a senha é obrigatória
 			.regex(/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/, { message: 'A senha é inválida.' }) //Garante que a senha atende a todos os requisitos: pelo menos uma letra maiúscula, pelo menos uma letra minúscula, pelo menos um número e pelo menos um caractere especial
@@ -36,12 +36,12 @@
 
 	// Schema de validação com Zod: tipo otp (etapa 1)
 	const otpStep1SignInSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
+		email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
 	})
 
 	// Schema de validação com Zod: tipo otp (etapa 2)
 	const otpStep2SignInSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
+		email: z.string().trim().toLowerCase().email({ message: 'O e-mail é inválido.' }), // Garante que o e-mail é válido
 		otp: z
 			.string()
 			.trim()
@@ -192,6 +192,7 @@
 <!-- Exibição de erros globais -->
 {#if errors.length > 0}
 	<div>
+		<hr />
 		<p>Ocorreram erros ao criar a conta.</p>
 		{#each errors as { field, message }}
 			{#if !field}
@@ -202,6 +203,7 @@
 				<p>{fieldName[field]}: {message}</p>
 			{/if}
 		{/each}
+		<hr />
 	</div>
 {/if}
 
@@ -239,7 +241,7 @@
 		<div>
 			<label>
 				Senha:
-				<input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
+				<input type="password" bind:value={password} autocomplete="current-password" required minlength="8" />
 			</label>
 			{#each errors as { field, message }}
 				{#if field === 'password'}
