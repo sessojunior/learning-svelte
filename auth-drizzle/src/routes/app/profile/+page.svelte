@@ -7,7 +7,7 @@
 	// Dados do perfil do usuário
 	const userId = session?.user.id ?? ''
 	let name = $state(session?.user.name ?? '')
-	let image = $state(userId ? `/users/profiles/${userId}.webp` : '')
+	let image = $state(session?.user.image ? `/users/profile/${session?.user.image}` : '')
 
 	// Dados para alterar e-mail
 	let stepEmail = $state(1)
@@ -59,7 +59,7 @@
 				errors = data.errors
 			} else if (data.success) {
 				success = 'Imagem de perfil atualizada com sucesso!'
-				image = `/users/profiles/${userId}.webp?timestamp=${Date.now()}`
+				image = `/users/profile/${userId}.webp?timestamp=${Date.now()}`
 
 				// Atualiza a imagem de perfil do usuário na API de autenticação no banco de dados
 				await authClient.updateUser({

@@ -12,7 +12,7 @@ export const POST = async ({ request }) => {
 	const IMAGE_QUALITY = 75 // Padrão: 75. Qualidade de compactação (0-100) para reduzir o tamanho em bytes da imagem
 	const IMAGE_SIZE_UPLOAD = 32 * 1024 * 1024 // Padrão: 32 * 1024 * 1024 (32 MB). Tamanho máximo permitido para upload da imagem
 	const IMAGE_ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'] // Padrão: ['jpg', 'jpeg', 'png', 'webp']. Extensões de arquivo de imagem permitidas
-	const IMAGE_DIRECTORY = 'static/users/profiles'
+	const IMAGE_DIRECTORY = 'static/users/profile'
 
 	try {
 		const formData = await request.formData()
