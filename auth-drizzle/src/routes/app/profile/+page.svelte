@@ -58,8 +58,13 @@
 			if (data.errors) {
 				errors = data.errors
 			} else if (data.success) {
-				success = data.success
+				success = 'Imagem de perfil atualizada com sucesso!'
 				image = `/users/profiles/${userId}.webp?timestamp=${Date.now()}`
+
+				// Atualiza a imagem de perfil do usuário na API de autenticação no banco de dados
+				await authClient.updateUser({
+					image: `${userId}.webp`
+				})
 			}
 		} catch (err) {
 			errors = [{ code: 'UNKNOWN_ERROR', message: 'Ocorreu um erro inesperado.' }]
