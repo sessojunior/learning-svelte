@@ -1,12 +1,14 @@
 <script lang="ts">
+	import { enhance } from '$app/forms'
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
 	import { handleSignOut, session } from '$lib/utils/auth'
 	import { z } from 'zod'
 
 	// Dados do perfil do usuário
+	const userId = session?.user.id ?? ''
 	let name = $state(session?.user.name ?? '')
-	let image = $state(session?.user.image ?? '')
+	let image = $state(userId ? `/users/profiles/${userId}.webp` : '')
 
 	// Dados para alterar e-mail
 	let stepEmail = $state(1)
@@ -19,62 +21,73 @@
 	let errors: { field?: string; code: string; message: string }[] = $state([])
 	let success = $state('')
 
-	// Mapeamento de campos para nomes amigáveis
-	const fieldName: Record<string, string> = {
-		email: 'E-mail',
-		password: 'Senha',
-		otp: 'Código'
+	// Upload da imagem de perfil do usuário
+	const authorizedExtensions = ['.jpg', '.jpeg', '.png', '.webp']
+
+	// Captura a resposta do backend após o upload da imagem de perfil do usuário
+	const handleUpdateImage = async (input: { action: URL; formData: FormData; formElement: HTMLFormElement; controller: AbortController; submitter: HTMLElement | null; cancel: () => void }) => {
+		loading = true
+		errors = []
+		success = ''
+
+		try {
+			const response = await fetch(input.action, {
+				method: 'POST',
+				body: input.formData
+			})
+
+			loading = false
+
+			if (response.ok) {
+				const data = await response.json()
+				success = data.message
+
+				// Atualiza a imagem com um timestamp para evitar cache
+				image = `/users/profiles/${userId}.webp?timestamp=${Date.now()}`
+			} else {
+				const errorData = await response.json()
+				errors = errorData.errors ?? [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido.' }]
+			}
+		} catch {
+			loading = false
+			errors = [{ code: 'NETWORK_ERROR', message: 'Erro ao enviar a requisição.' }]
+		}
 	}
 
-	// Schema de validação com Zod: tipo name
-	const nameUpdateSchema = z.object({
-		name: z.string().trim().min(2, { message: 'O nome deve ter pelo menos 2 caracteres.' }) // Garante que o nome tenha pelo menos 2 caracteres
-	})
-
-	// Schema de validação com Zod: tipo email
-	const emailUpdateSchema = z.object({
-		email: z.string().trim().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
-	})
-
-	// Schema de validação com Zod: tipo password
-	const passwordUpdateSchema = z.object({
-		password: z
-			.string()
-			.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
-			.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
-			.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
-			.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
-			.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
-	})
-
-	// Altera o nome
-	const handleUpdateName = async () => {
+	// Altera os dados do usuário
+	const handleUpdateUser = async () => {
+		loading = true
 		errors = []
+		success = ''
+
+		// Schema de validação com Zod
+		const schema = z.object({
+			name: z.string().trim().min(2, { message: 'O nome deve ter pelo menos 2 caracteres.' }) // Garante que o nome tenha pelo menos 2 caracteres
+		})
 
 		// 1 - Valida os dados recebidos
-		const validatedSchema = nameUpdateSchema.safeParse({ name })
+		const validatedSchema = schema.safeParse({ name })
 		if (!validatedSchema.success) {
 			errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
+			loading = false
 			return false
 		}
-
-		loading = true
 
 		// 2 - Chama a API de alterar dados do usuário
 		const { data, error } = await authClient.updateUser({
 			name: validatedSchema.data.name
 		})
 
-		loading = false
-
 		// 3 - Se obteve os dados com sucesso da API
 		if (data) {
 			// Exibe mensagem de sucesso
 			success = 'Nome do usuário alterado com sucesso.'
-
+			loading = false
 			return false
-		} else {
+		}
+
+		// Se obteve um erro
+		if (error) {
 			// Traduz os erros de API para mensagens amigáveis
 			const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 			errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
@@ -85,8 +98,13 @@
 	const handleUpdateEmail = async () => {
 		errors = []
 
+		// Schema de validação com Zod
+		const schema = z.object({
+			email: z.string().trim().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
+		})
+
 		// 1 - Valida os dados recebidos
-		const validatedSchema = emailUpdateSchema.safeParse({ email })
+		const validatedSchema = schema.safeParse({ email })
 		if (!validatedSchema.success) {
 			errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
 
@@ -111,7 +129,10 @@
 				success = 'Enviado um e-mail de verificação para seu novo e-mail para confirmar a alteração de e-mail.'
 
 				return false
-			} else {
+			}
+
+			// Se obteve um erro
+			if (error) {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
@@ -136,12 +157,29 @@
 				success = 'E-mail do usuário alterado com sucesso.'
 
 				return false
-			} else {
+			}
+
+			// Se obteve um erro
+			if (error) {
 				// Traduz os erros de API para mensagens amigáveis
 				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 				errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
 			}
 		}
+	}
+
+	// Altera a senha
+	const handleUpdatePassword = async () => {
+		// Schema de validação com Zod
+		const schema = z.object({
+			password: z
+				.string()
+				.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
+				.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
+				.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
+				.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
+				.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
+		})
 	}
 </script>
 
@@ -149,7 +187,7 @@
 
 <p>Página privada</p>
 
-<p>Esta página altera somente alguns dados da conta do usuário, como nome, e-mail, senha e imagem. Para alterar outros dados como sexo, data de nascimento, telefone etc. é necessário alterar a tabela de dados de perfil (profile), que deve ser criada depois.</p>
+<p>Esta página altera somente alguns dados da conta do usuário, como nome, e-mail, senha e imagem. Para alterar outros dados como sexo, data de nascimento, telefone etc. é necessário alterar a tabela de dados de perfil (profile), que deverá ser criada depois.</p>
 
 <hr />
 
@@ -178,7 +216,7 @@
 
 <p>Altere os dados do usuário abaixo.</p>
 
-<form onsubmit={handleUpdateName}>
+<form onsubmit={handleUpdateUser}>
 	<!-- Campo Nome -->
 	<div>
 		<label>
@@ -195,6 +233,33 @@
 	<div>
 		<button type="submit" disabled={loading}>
 			{loading ? 'Alterando...' : 'Alterar'}
+		</button>
+	</div>
+</form>
+
+<hr />
+
+<h2>Alterar imagem</h2>
+
+<p>UserId: {userId}</p>
+<p>Imagem:</p>
+{#if image}
+	<p>
+		<img src={image} alt="Foto do usuário" />
+	</p>
+{/if}
+
+<form method="post" use:enhance={handleUpdateImage} enctype="multipart/form-data">
+	<input type="hidden" name="userId" value={userId} />
+
+	<div>
+		<label for="file">Upload da imagem do usuário:</label>
+		<input type="file" id="file" name="fileToUpload" accept={authorizedExtensions.join(',')} required />
+	</div>
+
+	<div>
+		<button type="submit" disabled={loading}>
+			{loading ? 'Enviando...' : 'Enviar imagem'}
 		</button>
 	</div>
 </form>
@@ -229,13 +294,6 @@
 <hr />
 
 <h2>Alterar senha</h2>
-
-<hr />
-
-<h2>Alterar imagem</h2>
-
-<p>Image preview of file upload: <a href="https://svelte.dev/playground/b5333059a2f548809a3ac3f60a17a8a6?version=5.25.5" target="_blank">https://svelte.dev/playground/b5333059a2f548809a3ac3f60a17a8a6?version=5.25.5</a></p>
-<p>Image file upload: <a href="https://www.okupter.com/blog/sveltekit-file-upload" target="_blank">https://www.okupter.com/blog/sveltekit-file-upload</a></p>
 
 <hr />
 

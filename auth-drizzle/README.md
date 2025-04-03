@@ -27,13 +27,21 @@ Para instalar e configurar, siga os passos abaixo:
 Instale as seguintes dependências:
 
 ```bash
-npm i better-auth nodemailer zod
-npm i --save-dev @types/nodemailer
+npm install better-auth nodemailer zod
+npm install --save-dev @types/nodemailer
 ```
 
-## Arquivos
-
 O `bether-auth` para autenticação, `nodemailer` para envio de e-mails e `zod` para validação de formulários e campos.
+
+Para tratamento, manipulação e corte de imagens no servidor, como deixar uma imagem quadrada ou outros utilizei o [sharp](https://www.npmjs.com/package/sharp), que é uma biblioteca eficiente para manipulação de imagens.
+
+```bash
+npm install sharp
+```
+
+Essa biblioteca será usada no corte de imagens do perfil do usuário, em `src/routes/app/profile/+page.server.ts`.
+
+## Arquivos
 
 2. Arquivo `.env` e `.env.example`.
 
@@ -50,6 +58,8 @@ Esse arquivo mantém as configurações do Drizzle ORM, indica onde fica o camin
 5. Arquivo `src/hooks.server.ts`.
 
 Esse arquivo irá manipular as rotas que o arquivo `src/lib/auth-client.ts` utilizará para algumas funções de autenticação, utilizando a API do Better Auth.
+
+Também fará a proteção de rotas que estão dentro de `/app`, onde só será possível acessar se tiver feito o login.
 
 6. Arquivo `src/lib/auth-client.ts`.
 
