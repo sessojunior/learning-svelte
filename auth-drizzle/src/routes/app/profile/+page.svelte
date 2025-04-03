@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { enhance } from '$app/forms'
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
 	import { handleSignOut, session } from '$lib/utils/auth'
@@ -25,32 +24,47 @@
 	const authorizedExtensions = ['.jpg', '.jpeg', '.png', '.webp']
 
 	// Captura a resposta do backend após o upload da imagem de perfil do usuário
-	const handleUpdateImage = async (input: { action: URL; formData: FormData; formElement: HTMLFormElement; controller: AbortController; submitter: HTMLElement | null; cancel: () => void }) => {
+	const handleUpdateImage = async (event: SubmitEvent) => {
 		loading = true
 		errors = []
 		success = ''
 
+		// Previne o comportamento padrão do formulário (não recarregar a página)
+		event.preventDefault()
+
+		// Verifica se event.target é um HTMLFormElement
+		const formElement = event.target as HTMLFormElement | null
+		if (!formElement) {
+			errors = [{ code: 'FORM_ERROR', message: 'O formulário não foi encontrado.' }]
+			loading = false
+			return
+		}
+
+		// Obtém os dados do formulário
+		const formData = new FormData(formElement)
+		const controller = new AbortController()
+
 		try {
-			const response = await fetch(input.action, {
+			const response = await fetch('/api/users/upload-user-image-profile', {
 				method: 'POST',
-				body: input.formData
+				body: formData,
+				signal: controller.signal
 			})
 
-			loading = false
+			const data = await response.json()
+			console.log('Resposta do backend, data:', data)
 
-			if (response.ok) {
-				const data = await response.json()
-				success = data.message
-
-				// Atualiza a imagem com um timestamp para evitar cache
+			// Verifica se há erros na resposta
+			if (data.errors) {
+				errors = data.errors
+			} else if (data.success) {
+				success = data.success
 				image = `/users/profiles/${userId}.webp?timestamp=${Date.now()}`
-			} else {
-				const errorData = await response.json()
-				errors = errorData.errors ?? [{ code: 'UNKNOWN_ERROR', message: 'Erro desconhecido.' }]
 			}
-		} catch {
+		} catch (err) {
+			errors = [{ code: 'UNKNOWN_ERROR', message: 'Ocorreu um erro inesperado.' }]
+		} finally {
 			loading = false
-			errors = [{ code: 'NETWORK_ERROR', message: 'Erro ao enviar a requisição.' }]
 		}
 	}
 
@@ -194,15 +208,9 @@
 <!-- Exibição de erros globais -->
 {#if errors.length > 0}
 	<div>
-		<p>Ocorreram erros ao alterar os dados.</p>
+		<p><strong>Ocorreram erros ao alterar os dados.</strong></p>
 		{#each errors as error}
 			{error.code} {error.message}
-		{/each}
-		{#each errors as { field, message }}
-			{#if !field}
-				<!-- Erro geral, como 'Erro ao acessar o servidor.' -->
-				<p>{message}</p>
-			{/if}
 		{/each}
 	</div>
 {/if}
@@ -249,7 +257,7 @@
 	</p>
 {/if}
 
-<form method="post" use:enhance={handleUpdateImage} enctype="multipart/form-data">
+<form enctype="multipart/form-data" onsubmit={handleUpdateImage}>
 	<input type="hidden" name="userId" value={userId} />
 
 	<div>

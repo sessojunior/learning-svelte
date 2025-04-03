@@ -1,6 +1,6 @@
 // Verifica se o e-mail existe na tabela de usuários
 export const checkIfUserEmailExists = async (email: string): Promise<boolean> => {
-	const response = await fetch('/api/check-if-user-email-exists', {
+	const response = await fetch('/api/users/check-if-user-email-exists', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ email })
@@ -12,7 +12,7 @@ export const checkIfUserEmailExists = async (email: string): Promise<boolean> =>
 
 // Verifica se o e-mail do usuário está marcado como verificado na tabela de usuários
 export const checkIfUserEmailVerified = async (email: string): Promise<boolean> => {
-	const response = await fetch('/api/check-if-user-email-verified', {
+	const response = await fetch('/api/users/check-if-user-email-verified', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ email })
