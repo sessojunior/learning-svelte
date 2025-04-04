@@ -256,7 +256,7 @@
 {#if errors.length > 0}
 	<div>
 		<hr />
-		<p>Ocorreram erros ao criar a conta.</p>
+		<p>Ocorreram erros ao tentar fazer o login.</p>
 		{#each errors as { field, message }}
 			{#if !field}
 				<!-- Erro geral, como 'Erro ao acessar o servidor.' -->

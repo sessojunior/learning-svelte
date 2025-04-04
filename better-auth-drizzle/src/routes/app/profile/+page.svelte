@@ -177,20 +177,6 @@
 
 		loading = false
 	}
-
-	// Altera a senha
-	const handleUpdatePassword = async () => {
-		// Schema de validação com Zod
-		const schema = z.object({
-			password: z
-				.string()
-				.min(8, { message: 'A senha deve ter pelo menos 8 caracteres.' }) // Garante que a senha tenha pelo menos 8 caracteres
-				.regex(/[A-Z]/, { message: 'A senha deve conter pelo menos uma letra maiúscula.' }) // Garante que a senha contenha pelo menos uma letra maiúscula
-				.regex(/[a-z]/, { message: 'A senha deve conter pelo menos uma letra minúscula.' }) // Garante que a senha contenha pelo menos uma letra minúscula
-				.regex(/\d/, { message: 'A senha deve conter pelo menos um número.' }) // Garante que a senha contenha pelo menos um número
-				.regex(/[!@#$%^&*(),.?":{}|<>]/, { message: 'A senha deve conter pelo menos um caractere especial.' }) // Garante que a senha contenha pelo menos um caractere especial
-		})
-	}
 </script>
 
 <h1>Alterar dados do perfil</h1>
@@ -308,10 +294,6 @@
 		</button>
 	</div>
 </form>
-
-<hr />
-
-<h2>Alterar senha</h2>
 
 <hr />
 
