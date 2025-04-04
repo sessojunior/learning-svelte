@@ -1,17 +1,18 @@
 <script lang="ts">
+	import { onMount } from 'svelte'
 	import { authClient } from '$lib/auth-client'
 	import { errorCodes } from '$lib/utils/auth'
-	import { handleSignOut, session } from '$lib/utils/auth'
+	import { handleSignOut } from '$lib/utils/auth'
 	import { z } from 'zod'
 
 	// Dados do perfil do usuário
-	const userId = session?.user.id ?? ''
-	let name = $state(session?.user.name ?? '')
-	let image = $state(session?.user.image ? `/users/profile/${session?.user.image}` : '')
+	let userId = $state('')
+	let name = $state('')
+	let image = $state('')
 
 	// Dados para alterar e-mail
+	let email = $state('')
 	let stepEmail = $state(1)
-	let email = $state(session?.user.email ?? '')
 
 	// Senha do usuário
 	let password = $state('')
@@ -20,8 +21,22 @@
 	let errors: { field?: string; code: string; message: string }[] = $state([])
 	let success = $state('')
 
-	// Upload da imagem de perfil do usuário
-	const authorizedExtensions = ['.jpg', '.jpeg', '.png', '.webp']
+	// Executa o código assim que a página for montada
+	onMount(async () => {
+		try {
+			const { data: session } = await authClient.getSession()
+
+			// Dados do perfil do usuário
+			userId = session?.user.id ?? ''
+			name = session?.user.name ?? ''
+			image = session?.user.image ? `/users/profile/${session?.user.image}` : ''
+
+			// Dados para alterar e-mail
+			email = session?.user.email ?? ''
+		} catch (err) {
+			console.error('Erro ao obter a sessão:', err)
+		}
+	})
 
 	// Captura a resposta do backend após o upload da imagem de perfil do usuário
 	const handleUpdateImage = async (event: SubmitEvent) => {
@@ -68,9 +83,9 @@
 			}
 		} catch (err) {
 			errors = [{ code: 'UNKNOWN_ERROR', message: 'Ocorreu um erro inesperado.' }]
-		} finally {
-			loading = false
 		}
+
+		loading = false
 	}
 
 	// Altera os dados do usuário
@@ -111,10 +126,13 @@
 			const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
 			errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
 		}
+
+		loading = false
 	}
 
 	// Altera o e-mail
 	const handleUpdateEmail = async () => {
+		loading = true
 		errors = []
 
 		// Schema de validação com Zod
@@ -122,31 +140,30 @@
 			email: z.string().trim().email({ message: 'O e-mail é inválido.' }) // Garante que o e-mail é válido
 		})
 
-		// 1 - Valida os dados recebidos
+		// Valida os dados recebidos
 		const validatedSchema = schema.safeParse({ email })
 		if (!validatedSchema.success) {
 			errors = validatedSchema.error.errors.map((e) => ({ field: String(e.path[0]), code: e.code, message: e.message }))
-
+			loading = false
 			return false
 		}
 
 		// Etapa 1: Se alterou apenas o email
 		if (stepEmail === 1) {
-			loading = true
-
-			// 2 - Chama a API para enviar o OTP para o e-mail do usuário
-			const { data, error } = await authClient.emailOtp.sendVerificationOtp({
-				email: validatedSchema.data.email,
-				type: 'email-verification' // Pode ser 'sign-in', 'forget-password' ou 'email-verification'
+			// Chama a API para alterar o e-mail
+			const { data, error } = await authClient.changeEmail({
+				newEmail: validatedSchema.data.email,
+				callbackURL: '/verify-email' // URL de redirecionamento após a verificação do e-mail
 			})
-
-			loading = false
 
 			// 3 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Exibe mensagem de sucesso
 				success = 'Enviado um e-mail de verificação para seu novo e-mail para confirmar a alteração de e-mail.'
 
+				// Pula para a etapa 2
+				stepEmail = 2
+				loading = false
 				return false
 			}
 
@@ -158,33 +175,7 @@
 			}
 		}
 
-		// Etapa 2: Se alterou o email e confirmou clicando no link enviado por e-mail
-		if (stepEmail === 2) {
-			loading = true
-
-			// 2 - Chama a API de alterar o e-mail do usuário
-			const { data, error } = await authClient.changeEmail({
-				newEmail: email,
-				callbackURL: '/app/dashboard' // URL de redirecionamento após a verificação do e-mail
-			})
-
-			loading = false
-
-			// 3 - Se obteve os dados com sucesso da API
-			if (data) {
-				// Exibe mensagem de sucesso
-				success = 'E-mail do usuário alterado com sucesso.'
-
-				return false
-			}
-
-			// Se obteve um erro
-			if (error) {
-				// Traduz os erros de API para mensagens amigáveis
-				const errorMessage = (error?.code as keyof typeof errorCodes) ? errorCodes[error?.code as keyof typeof errorCodes] : ''
-				errors = [{ code: error?.code ?? '', message: errorMessage ?? error?.message }]
-			}
-		}
+		loading = false
 	}
 
 	// Altera a senha
@@ -267,7 +258,7 @@
 
 	<div>
 		<label for="file">Upload da imagem do usuário:</label>
-		<input type="file" id="file" name="fileToUpload" accept={authorizedExtensions.join(',')} required />
+		<input type="file" id="file" name="fileToUpload" accept=".jpg, .jpeg, .png, .webp" required />
 	</div>
 
 	<div>
@@ -281,9 +272,23 @@
 
 <h2>Alterar e-mail</h2>
 
-<p>Altere o e-mail do usuário abaixo.</p>
-
 <form onsubmit={handleUpdateEmail}>
+	<!-- Etapa 1: informar o e-mail -->
+	{#if stepEmail === 1}
+		<div>
+			<p>Altere o e-mail abaixo. Iremos enviar um e-mail de verificação para o seu e-mail atual para confirmação de alteração de e-mail. Você deve abrir o link neste navegador da web, pois é necessário estar logado para alterar seu e-mail.</p>
+			<p>Caso não tenha mais acesso ao seu e-mail atual, não será possível alterar o e-mail por aqui.</p>
+		</div>
+	{/if}
+
+	<!-- Etapa 2: Se enviou o email -->
+	{#if stepEmail === 2}
+		<div>
+			<h2>Etapa 2</h2>
+			<p>Foi enviado um código para o seu e-mail atual. Para alterar novamente o e-mail, informe abaixo seu e-mail.</p>
+		</div>
+	{/if}
+
 	<!-- Campo E-mail -->
 	<div>
 		<label>

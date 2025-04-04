@@ -1,5 +1,18 @@
 <script lang="ts">
-	import { handleSignOut, session } from '$lib/utils/auth'
+	import { onMount } from 'svelte'
+	import { authClient } from '$lib/auth-client'
+	import { handleSignOut } from '$lib/utils/auth'
+
+	let userSession: { [key: string]: any } | null = null
+
+	onMount(async () => {
+		try {
+			const { data } = await authClient.getSession()
+			userSession = data
+		} catch (err) {
+			console.error('Erro ao obter a sessão:', err)
+		}
+	})
 </script>
 
 <h1>Dashboard</h1>
@@ -7,34 +20,31 @@
 
 <hr />
 
-{#if session}
+{#if userSession}
 	<p>Dados da sessão:</p>
 	<ul>
-		<li>Token: {session?.session.token}</li>
-		<li>Criado em: {session?.session.createdAt}</li>
-		<li>Expira em: {session?.session.expiresAt}</li>
-		<li>Atualiza em: {session?.session.updatedAt}</li>
-		<li>Expira em: {session?.session.expiresAt}</li>
-		<li>userId: {session?.session.userId}</li>
-		<li>id: {session?.session.id}</li>
-		<li>
-			<img src={session?.user.image} alt="Imagem do usuário" />
-		</li>
-		<li>ID: {session?.user.id}</li>
-		<li>Data de atualização: {session?.user.updatedAt}</li>
+		<li>Token: {userSession?.session.token}</li>
+		<li>Criado em: {userSession?.session.createdAt}</li>
+		<li>Expira em: {userSession?.session.expiresAt}</li>
+		<li>Atualiza em: {userSession?.session.updatedAt}</li>
+		<li>Expira em: {userSession?.session.expiresAt}</li>
+		<li>userId: {userSession?.session.userId}</li>
+		<li>session id: {userSession?.session.id}</li>
 	</ul>
 	<hr />
 	<p>Dados do usuário:</p>
 	<ul>
-		<li>Nome: {session?.user.name}</li>
-		<li>E-mail: {session?.user.email}</li>
-		<li>E-mail verificado: {session?.user.emailVerified}</li>
-		<li>Imagem: {session?.user.image}</li>
-		<li>
-			<img src={session?.user.image} alt="Imagem do usuário" />
-		</li>
-		<li>ID: {session?.user.id}</li>
-		<li>Data de atualização: {session?.user.updatedAt}</li>
+		<li>Nome: {userSession?.user.name}</li>
+		<li>E-mail: {userSession?.user.email}</li>
+		<li>E-mail verificado: {userSession?.user.emailVerified}</li>
+		<li>Imagem: {userSession?.user.image}</li>
+		{#if userSession?.user.image}
+			<li>
+				<img src={userSession?.user.image} alt="Imagem do usuário" />
+			</li>
+		{/if}
+		<li>user ID: {userSession?.user.id}</li>
+		<li>Data de atualização: {userSession?.user.updatedAt}</li>
 	</ul>
 	<hr />
 	<p><a href="/app/profile">Ir para a página de perfil</a></p>

@@ -29,6 +29,8 @@ export const auth = betterAuth({
 	// Para desabilitar esse comportamento, defina 'autoSignIn' como 'false'
 	emailAndPassword: {
 		enabled: true,
+		minPasswordLength: 8,
+		maxPasswordLength: 128,
 		autoSignIn: true, // Padrão: true
 		requireEmailVerification: true // Padrão: false. Habilitando requer que o usuário verifique seu e-mail antes de fazer login
 	},
@@ -73,19 +75,17 @@ export const auth = betterAuth({
 	// Dados do usuário
 	user: {
 		changeEmail: {
-			enabled: true // Padrão: false. Deixar como true para permitir que os usuários alterem seus e-mails
-			// sendChangeEmailVerification: async ({ user, newEmail, url, token }) => {
-			// 	// Para usuários com e-mail verificado, envia um e-mail de verificação com uma URL e um token
-			// 	// Mas se o e-mail atual não estiver verificado, a alteração do e-mail ocorre sem enviar e-mail de verificação
-			// 	await sendEmail({
-			// 		to: newEmail,
-			// 		subject: 'Aprove a alteração de e-mail',
-			// 		text: `Clique no link a seguir para confirmar a alteração de seu e-mail: \n\n${url}`
-			// 	})
-			// 	console.log('user.email', user.email)
-			// 	console.log('newEmail', newEmail)
-			// 	console.log('token', token)
-			// },
+			enabled: true, // Padrão: false. Deixar como true para permitir que os usuários alterem seus e-mails
+			sendChangeEmailVerification: async ({ user, newEmail, token }) => {
+				// Para usuários com e-mail verificado, envia um e-mail de verificação com uma URL e um token para o e-mail atual
+				// Mas se o e-mail atual não estiver verificado, a alteração do e-mail ocorre sem enviar e-mail de verificação
+				// Não utiliza a URL com rota padrão {url} (/api/auth/verify-email) e sim uma URL com uma página de verificação de e-mail personalizada (/verify-email)
+				await sendEmail({
+					to: user.email,
+					subject: `Aprove a alteração de e-mail`,
+					text: `Olá ${user.name}, \n\nClique no link a seguir para confirmar a alteração de e-mail para ${newEmail}: \n\n${env.BETTER_AUTH_URL}/verify-email?token=${token}\n\nCaso não queira realizar essa alterçaõ, ignore esse e-mail.`
+				})
+			}
 		}
 	},
 	// Dados da sessão

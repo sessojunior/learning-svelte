@@ -4,6 +4,15 @@
 	import { checkIfUserEmailExists } from '$lib/utils/db'
 	import { z } from 'zod'
 
+	import { page } from '$app/state'
+
+	// URL de redirecionamento
+	const redirectType = page.url.searchParams.get('redirectType') ?? '' // 'verify-email'
+	const redirectURL = page.url.searchParams.get('redirectURL') ?? ''
+	const token = page.url.searchParams.get('token') ?? ''
+	const callbackURL = page.url.searchParams.get('callbackURL') ?? ''
+	const redirectPage = `${redirectURL}?token=${token}&callbackURL=${callbackURL}`
+
 	// Tipo de login: 'email', 'otp', 'social'
 	let type = $state('email')
 
@@ -47,7 +56,7 @@
 				email: validatedSchema.data.email,
 				password: validatedSchema.data.password,
 				rememberMe: true, // Padrão: true. Se falso, o usuário será desconectado quando o navegador for fechado. (opcional)
-				callbackURL: '/app/dashboard'
+				callbackURL: redirectURL ? redirectPage : '/app/dashboard' // Se não foi redirecionado para esta página por uma página de verificação de e-mail, redireciona para a dashboard, caso contrário, redireciona para a página recebida por parâmetro.
 			})
 
 			// 3 - Se o e-mail do usuário não está verificado
@@ -98,7 +107,7 @@
 			// 3 - Se obteve os dados com sucesso da API
 			if (data) {
 				// 3.2 - Redireciona para a página de dashboard
-				window.location.href = '/app/dashboard'
+				window.location.href = redirectURL ? redirectPage : '/app/dashboard' // Se não foi redirecionado para esta página por uma página de verificação de e-mail, redireciona para a dashboard, caso contrário, redireciona para a página recebida por parâmetro.
 
 				loading = false
 				return false
@@ -200,7 +209,7 @@
 			// 4 - Se obteve os dados com sucesso da API
 			if (data) {
 				// Redireciona para o dashboard
-				window.location.href = '/app/dashboard'
+				window.location.href = redirectURL ? redirectPage : '/app/dashboard' // Se não foi redirecionado para esta página por uma página de verificação de e-mail, redireciona para a dashboard, caso contrário, redireciona para a página recebida por parâmetro.
 
 				loading = false
 				return false
@@ -223,7 +232,7 @@
 		errors = []
 
 		const options = {
-			callbackURL: '/app/dashboard', // Padrão: '/'. URL de redirecionamento após o usuário fazer login com o provedor social.
+			callbackURL: redirectURL ? redirectPage : '/app/dashboard', // Padrão: '/'. URL de redirecionamento após o usuário fazer login com o provedor social.
 			errorCallbackURL: '/sign-in', // URL de redirecionamento em caso de erro durante o processo de login com o provedor social.
 			newUserCallbackURL: '/app/dashboard', //  URL de redirecionamento em caso de sucesso ao criar uma nova conta com o provedor social.
 			disableRedirect: false // Padrão: false. Se true, o redirecionamento para a URL de sucesso ou erro será desabilitado.
@@ -255,6 +264,14 @@
 			{/if}
 		{/each}
 		<hr />
+	</div>
+{/if}
+
+<!-- Redirecionamento após o login -->
+{#if redirectType === 'verify-email'}
+	<div>
+		<h2>Faça login para confirmar a alteração do seu e-mail.</h2>
+		<p>Após o login você será redirecionado para a página de perfil, onde poderá ver que seu e-mail foi alterado.</p>
 	</div>
 {/if}
 

@@ -33,20 +33,16 @@ export const errorCodes = {
 	// Códigos de erro de verificação e alteração de dados
 	CHANGE_EMAIL_IS_DISABLED: 'Alteração de e-mail desabilitada.',
 	VERIFICATION_EMAIL_ISNT_ENABLED: 'Verificação de e-mail não está habilitada.',
-	EMAIL_IS_THE_SAME: 'O e-mail é o mesmo.'
+	EMAIL_IS_THE_SAME: 'O e-mail é o mesmo.',
+	COULDNT_UPDATE_YOUR_EMAIL: 'Não foi possivel alterar seu e-mail.'
 }
 
 // Função de logout
-export async function handleSignOut() {
-	await authClient.signOut({
-		fetchOptions: {
-			onSuccess: () => {
-				// Redireciona para a página de login
-				goto('/sign-in')
-			}
-		}
-	})
+export const handleSignOut = async () => {
+	try {
+		await authClient.signOut()
+		goto('/sign-in') // Redireciona após o logout
+	} catch (err) {
+		console.error('Erro ao realizar logout:', err)
+	}
 }
-
-// Obter dados da sessão do usuário
-export const { data: session } = await authClient.getSession()
